@@ -15,6 +15,9 @@ class AppDatabase {
     final opened = await openDatabase(
       dbPath,
       version: 1,
+      onConfigure: (database) async {
+        await database.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _createSchema,
     );
     _database = opened;
