@@ -45,7 +45,7 @@ class LocalAiRuntime extends ChangeNotifier {
       throw const FormatException('Поддерживаются только модели в формате GGUF.');
     }
     if (!await source.exists()) {
-      throw const FileSystemException('Файл модели не найден.', sourcePath);
+      throw FileSystemException('Файл модели не найден.', sourcePath);
     }
 
     final supportDirectory = await getApplicationSupportDirectory();
