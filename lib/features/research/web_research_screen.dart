@@ -154,11 +154,11 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final text = value.trim().toLowerCase();
     if (text.length < 150) return false;
     final hasRole = text.contains('роль:') || text.contains('ты —') || text.contains('ты -') || text.contains('you are') || text.contains('act as');
-    final hasGoal = text.contains('цель:') || text.contains('задача:') || text.contains('сделай') || text.contains('создай') || text.contains('проанализируй');
-    final hasInput = text.contains('вход') || text.contains('контекст:') || text.contains('данные:') || text.contains('[текст]') || text.contains('[тема]');
+    final hasGoal = text.contains('цель:') || text.contains('задача:') || text.contains('сделай') || text.contains('создай') || text.contains('проанализируй') || text.contains('task:') || text.contains('objective:') || text.contains('create') || text.contains('analyze');
+    final hasInput = text.contains('вход') || text.contains('контекст:') || text.contains('данные:') || text.contains('[текст]') || text.contains('[тема]') || text.contains('input:') || text.contains('context:');
     final hasProcess = text.contains('алгоритм') || text.contains('шаг') ||
-        text.contains('порядок работы') || text.contains('этап');
-    final hasOutput = text.contains('формат') || text.contains('результат:') || text.contains('ответ:') || text.contains('выведи');
+        text.contains('порядок работы') || text.contains('этап') || text.contains('instructions') || text.contains('step 1') || text.contains('first,') || text.contains('then');
+    final hasOutput = text.contains('формат') || text.contains('результат:') || text.contains('ответ:') || text.contains('выведи') || text.contains('output:') || text.contains('response:');
     final hasPlaceholder = RegExp(r'\[[^\]]{2,}\]').hasMatch(value);
     return (hasRole && hasGoal && (hasInput || hasPlaceholder) && (hasProcess || hasOutput)) || (hasGoal && hasInput && hasProcess && hasOutput && hasPlaceholder);
   }
@@ -268,7 +268,7 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
       if (topic.isEmpty || topic.length > 120 || topic.toLowerCase().contains('короткое название') || topic.toLowerCase().contains('[тема]')) {
         topic = fallbackTopics[_topicCursor % fallbackTopics.length];
       }
-      if (query.length < 4 || query.length > 220) {
+      if (query.length < 8 || query.length > 220 || query.toLowerCase().contains('конкретный поисковый запрос') || query.toLowerCase().contains('[запрос]')) {
         query = 'prompt template "$topic" examples reusable prompt';
       }
 
