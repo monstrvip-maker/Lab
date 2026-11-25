@@ -139,6 +139,37 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     }
   }
 
+  bool _isUsefulSummary(String value) {
+    final normalized = value.trim();
+    if (normalized.length < 140) return false;
+    final words = normalized
+        .toLowerCase()
+        .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+        .where((word) => word.length > 2)
+        .toSet();
+    return words.length >= 22 &&
+        !normalized.toUpperCase().contains('ИСТОЧНИК_НЕПОДХОДИТ');
+  }
+
+  bool _isUsefulPromptTemplate(String value) {
+    final text = value.trim().toLowerCase();
+    if (text.length < 220) return false;
+    final hasRole = text.contains('роль:') || text.contains('ты —') || text.contains('ты -');
+    final hasGoal = text.contains('цель:') || text.contains('задача:');
+    final hasInput = text.contains('вход') || text.contains('контекст:');
+    final hasProcess = text.contains('алгоритм') || text.contains('шаг') ||
+        text.contains('порядок работы') || text.contains('этап');
+    final hasOutput = text.contains('формат') || text.contains('результат:');
+    final hasPlaceholder = RegExp(r'\\[[^\\]]{2,}\\]').hasMatch(value);
+    return hasRole && hasGoal && hasInput && hasProcess && hasOutput && hasPlaceholder;
+  }
+
+  String _normalizeForDuplicateCheck(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true), ' ')
+      .trim()
+      .replaceAll(RegExp(r'\\s+'), ' ');
+
   Future<void> _learningCycle() async {
     _busy = true;
     try {
@@ -146,6 +177,16 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       final prompts = await _prompts.getAll();
       final knowledgeContext = knowledge.take(18).map((m) => '- ${m.title}: ${m.content.substring(0, m.content.length > 260 ? 260 : m.content.length)}').join('\n');
       final promptContext = prompts.take(25).map((p) => '- ${p.title}').join('\n');
+      final db = await AppDatabase.instance.database;
+      final recentHistory = await db.query(
+        'learning_history',
+        columns: ['topic', 'title'],
+        orderBy: 'created_at DESC',
+        limit: 24,
+      );
+      final recentTopics = recentHistory
+          .map((row) => '- ${row['topic']}: ${row['title']}')
+          .join('\n');
 
       if (mounted) setState(() => _status = 'Qwen самостоятельно выбирает, что изучить дальше…');
       final plan = await _generate('''
@@ -242,23 +283,36 @@ $page
           final summaryMatch = RegExp(r'КОНСПЕКТ\s*:\s*([\s\S]*?)(?=ПРОМТ_НАЗВАНИЕ\s*:|$)', caseSensitive: false).firstMatch(extracted);
           final titleMatch = RegExp(r'ПРОМТ_НАЗВАНИЕ\s*:\s*([\s\S]*?)(?=ПРОМТ_ШАБЛОН\s*:|$)', caseSensitive: false).firstMatch(extracted);
           final templateMatch = RegExp(r'ПРОМТ_ШАБЛОН\s*:\s*([\s\S]*?)(?=ПРИМЕНЕНИЕ\s*:|$)', caseSensitive: false).firstMatch(extracted);
-          final summary = summaryMatch?.group(1)?.trim().isNotEmpty == true ? summaryMatch!.group(1)!.trim() : extracted;
+          final summary = summaryMatch?.group(1)?.trim().isNotEmpty == true ? summaryMatch!.group(1)!.trim() : '';
+          if (!_isUsefulSummary(summary)) {
+            if (mounted) setState(() => _log.insert(0, 'Отклонён слабый конспект: ${result.title}'));
+            continue;
+          }
           var templateTitle = titleMatch?.group(1)?.trim() ?? '';
           var template = templateMatch?.group(1)?.trim() ?? '';
           if (template.length < 100 || template.toUpperCase() == 'НЕТ') {
             templateTitle = 'Исследование: $topic — практический промт';
             template = 'РОЛЬ: Ты — практикующий специалист по теме «$topic».\nЦЕЛЬ: [Какой конкретный результат нужно получить].\nВХОДНЫЕ ДАННЫЕ: [Контекст, исходные материалы, аудитория и ограничения].\nПРИНЦИПЫ ИЗ ИССЛЕДОВАНИЯ:\n$summary\nАЛГОРИТМ РАБОТЫ:\n1. Проанализируй входные данные и выдели неизвестное.\n2. Примени только относящиеся к задаче принципы исследования.\n3. Составь решение по шагам и проверь его на противоречия.\n4. Отдели подтверждённые сведения от предположений.\nОГРАНИЧЕНИЯ: Не выдумывай факты, версии, ссылки и результаты проверок. Если данных недостаточно — явно укажи это.\nФОРМАТ ОТВЕТА: [Структура и детализация результата].\nКРИТЕРИИ КАЧЕСТВА: Точность, применимость, проверяемость, полнота и отсутствие повторов.\nИСТОЧНИК ДЛЯ КОНТЕКСТА: ${result.url}';
           if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
+          final templateIsUseful = _isUsefulPromptTemplate(template);
           final existingMemory = await _memory.list(search: result.title);
           final memoryAlreadySaved = existingMemory.any((item) => item.source.contains(result.url));
           if (!memoryAlreadySaved) {
             await _memory.save(title: '$topic — ${result.title}', content: '$summary\n\nИсточник: ${result.url}\nПоисковик: ${result.provider}', category: 'Знание', tags: 'автообучение, prompt engineering, $topic', source: 'Автономное исследование: ${result.url}');
           }
           final existing = await _prompts.getAll();
-          final duplicate = existing.any((p) => (p.sourceUrl == result.url && p.title.toLowerCase() == templateTitle.toLowerCase()) || p.originalText.trim() == template.trim());
+          final normalizedTemplate = _normalizeForDuplicateCheck(template);
+          final duplicate = existing.any((p) {
+            final saved = _normalizeForDuplicateCheck(p.originalText);
+            return (p.sourceUrl == result.url &&
+                    p.title.toLowerCase() == templateTitle.toLowerCase()) ||
+                (saved.isNotEmpty && saved == normalizedTemplate);
+          });
           int? promptId;
-          if (!duplicate && template.length >= 100) {
+          if (templateIsUseful && !duplicate) {
             promptId = await _prompts.create(title: templateTitle, originalText: template, category: 'Автообучение · $topic', sourceUrl: result.url);
+          } else if (!templateIsUseful && mounted) {
+            setState(() => _log.insert(0, 'Конспект сохранён, но промт отклонён: не пройдена проверка структуры'));
           }
           await db.transaction((txn) async {
             await txn.insert('learning_history', {'topic': topic, 'title': result.title, 'source_url': result.url, 'provider': result.provider, 'summary': summary, 'prompt_id': promptId, 'created_at': DateTime.now().toIso8601String()});
