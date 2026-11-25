@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
+import 'package:sqflite/sqflite.dart';
 
 import '../../ai/research/web_research_service.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
