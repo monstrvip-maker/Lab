@@ -6,6 +6,7 @@ import '../../ai/agents/agent_orchestrator.dart';
 import '../../ai/agents/agent_run_history.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../../data/repositories/memory_repository.dart';
+import '../../data/repositories/advanced_repository.dart';
 import '../prompts/prompt_library_screen.dart';
 import 'model_manager_screen.dart';
 
@@ -21,6 +22,7 @@ class AiScreen extends StatefulWidget {
 class _AiScreenState extends State<AiScreen> {
   final _runtime = LocalAiRuntime.instance;
   final _memory = MemoryRepository();
+  final _advanced = AdvancedRepository();
   String _lastTask = '';
   final _input = TextEditingController();
   final List<ChatMessage> _history = [];
@@ -221,6 +223,7 @@ class _AiScreenState extends State<AiScreen> {
       }
       if (_agentMode && response.toString().trim().isNotEmpty) {
         await AgentRunHistory.save(text, response.toString());
+        await _advanced.saveAgentRun(task: text, result: response.toString());
       }
       if (!_agentMode) {
         _history.add(
