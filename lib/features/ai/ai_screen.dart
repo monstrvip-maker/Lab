@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
 
 import '../../ai/agents/agent_orchestrator.dart';
+import '../../ai/agents/agent_run_history.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../prompts/prompt_library_screen.dart';
 import 'model_manager_screen.dart';
@@ -34,6 +36,77 @@ class _AiScreenState extends State<AiScreen> {
   void dispose() {
     _input.dispose();
     super.dispose();
+  }
+
+
+  Future<void> _openHistory() async {
+    final records = await AgentRunHistory.load();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('История задач агентов', style: Theme.of(sheetContext).textTheme.titleLarge)),
+                    if (records.isNotEmpty)
+                      TextButton(
+                        onPressed: () async {
+                          await AgentRunHistory.clear();
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        },
+                        child: const Text('Очистить'),
+                      ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: records.isEmpty
+                    ? const Center(child: Text('Сохранённых задач пока нет'))
+                    : ListView.separated(
+                        itemCount: records.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final record = records[index];
+                          return ListTile(
+                            title: Text(record.task, maxLines: 2, overflow: TextOverflow.ellipsis),
+                            subtitle: Text('${record.createdAt.toLocal()} · ${record.result.length} символов'),
+                            onTap: () async {
+                              final fullText = '${record.task}\n\n${record.result}';
+                              await showDialog<void>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: const Text('Результат задачи'),
+                                  content: SingleChildScrollView(child: SelectableText(fullText)),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть')),
+                                    FilledButton.icon(
+                                      onPressed: () {
+                                        Clipboard.setData(ClipboardData(text: fullText));
+                                        Navigator.pop(dialogContext);
+                                      },
+                                      icon: const Icon(Icons.copy),
+                                      label: const Text('Копировать'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _openModels() async {
@@ -72,6 +145,9 @@ class _AiScreenState extends State<AiScreen> {
         if (!mounted) return;
         setState(() => _lines.last.text = response.toString());
       }
+      if (_agentMode && response.toString().trim().isNotEmpty) {
+        await AgentRunHistory.save(text, response.toString());
+      }
       if (!_agentMode) {
         _history.add(
           ChatMessage(role: 'assistant', content: response.toString()),
@@ -108,6 +184,12 @@ class _AiScreenState extends State<AiScreen> {
                 Icons.hub_outlined,
                 color: _agentMode ? Theme.of(context).colorScheme.primary : null,
               ),
+            ),
+
+            IconButton(
+              tooltip: 'История задач агентов',
+              onPressed: _openHistory,
+              icon: const Icon(Icons.history),
             ),
             IconButton(
               tooltip: 'Менеджер моделей',
