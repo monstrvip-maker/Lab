@@ -110,7 +110,16 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
         try {
           await _learningCycle();
         } catch (cycleError) {
-          if (mounted) {
+          if (_isPromptDecodeError(cycleError)) {
+            _stopRequested = true;
+            if (mounted) {
+              setState(() {
+                _error = 'Локальная модель не смогла разобрать формат запроса. Автообучение остановлено, чтобы не повторять одинаковые ошибки. Проверьте Instruct GGUF и шаблон чата.';
+                _status = 'Остановлено: ошибка декодирования запроса Qwen.';
+                _log.insert(0, 'Автообучение остановлено: ошибка декодирования prompt');
+              });
+            }
+          } else if (mounted) {
             setState(() {
               _status = 'Этот цикл не завершён. Подготовлю другую тему: $cycleError';
               _log.insert(0, 'Цикл пропущен: $cycleError');
@@ -138,6 +147,10 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       }
     }
   }
+
+  bool _isPromptDecodeError(Object error) =>
+      error.toString().toLowerCase().contains('failed to decode prompt') ||
+      error.toString().toLowerCase().contains('decode prompt');
 
   bool _isUsefulSummary(String value) {
     final normalized = value.trim();
@@ -333,6 +346,16 @@ $page
           }
           if (studied >= 2) break;
         } catch (e) {
+          if (_isPromptDecodeError(e)) {
+            _stopRequested = true;
+            if (mounted) {
+              setState(() {
+                _error = 'Qwen не декодирует запрос. Остановлено без повторных попыток на остальных страницах.';
+                _log.insert(0, 'Остановлено на источнике: ошибка декодирования prompt');
+              });
+            }
+            break;
+          }
           if (mounted) setState(() => _log.insert(0, 'Пропущен источник ${result.url}: $e'));
         }
       }
