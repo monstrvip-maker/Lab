@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/repositories/workspace_repository.dart';
+import '../../data/repositories/advanced_repository.dart';
 
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({super.key});
@@ -68,6 +69,7 @@ class _ProjectDetailScreen extends StatefulWidget {
 }
 
 class _ProjectDetailScreenState extends State<_ProjectDetailScreen> {
+  final _advanced = AdvancedRepository();
   late Future<List<ProjectTask>> _future;
   @override
   void initState() { super.initState(); _reload(); }
@@ -111,16 +113,59 @@ class _ProjectDetailScreenState extends State<_ProjectDetailScreen> {
         if (tasks.isEmpty) return const Center(child: Text('Добавь первую задачу проекта'));
         return ListView.separated(padding: const EdgeInsets.fromLTRB(16, 0, 16, 90), itemCount: tasks.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, i) {
           final t = tasks[i];
-          return ListTile(leading: Icon(t.status == 'Готово' ? Icons.check_circle : Icons.radio_button_unchecked), title: Text(t.title), subtitle: Text(t.details.isEmpty ? t.status : '${t.status} · ${t.details}'), trailing: PopupMenuButton<String>(onSelected: (v) async {
-            if (v == 'delete') await widget.repository.deleteTask(t.id); else await widget.repository.updateTaskStatus(t.id, v);
-            if (mounted) setState(_reload);
-          }, itemBuilder: (_) => const [
-            PopupMenuItem(value: 'Запланировано', child: Text('Запланировано')),
-            PopupMenuItem(value: 'В работе', child: Text('В работе')),
-            PopupMenuItem(value: 'Готово', child: Text('Готово')),
-            PopupMenuDivider(),
-            PopupMenuItem(value: 'delete', child: Text('Удалить')),
-          ]));
+          return Card(child: ExpansionTile(
+            leading: Icon(t.status == 'Готово' ? Icons.check_circle : Icons.radio_button_unchecked),
+            title: Text(t.title),
+            subtitle: Text(t.details.isEmpty ? t.status : '${t.status} · ${t.details}', maxLines: 2, overflow: TextOverflow.ellipsis),
+            trailing: PopupMenuButton<String>(onSelected: (v) async {
+              if (v == 'delete') { await widget.repository.deleteTask(t.id); }
+              else { await widget.repository.updateTaskStatus(t.id, v); }
+              if (mounted) setState(_reload);
+            }, itemBuilder: (_) => const [
+              PopupMenuItem(value: 'Запланировано', child: Text('Запланировано')),
+              PopupMenuItem(value: 'В работе', child: Text('В работе')),
+              PopupMenuItem(value: 'Готово', child: Text('Готово')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'delete', child: Text('Удалить')),
+            ]),
+            children: [
+              FutureBuilder<List<TaskCheckpoint>>(
+                future: _advanced.checkpoints(t.id),
+                builder: (context, checkpointSnap) {
+                  final checkpoints = checkpointSnap.data ?? [];
+                  return Column(children: [
+                    if (checkpointSnap.connectionState == ConnectionState.waiting)
+                      const LinearProgressIndicator(),
+                    for (final checkpoint in checkpoints)
+                      CheckboxListTile(
+                        dense: true, value: checkpoint.done, title: Text(checkpoint.title),
+                        onChanged: (value) async {
+                          await _advanced.setCheckpoint(checkpoint.id, value ?? false);
+                          if (mounted) setState(_reload);
+                        },
+                      ),
+                    TextButton.icon(
+                      onPressed: () async {
+                        final controller = TextEditingController();
+                        final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+                          title: const Text('Контрольная точка'),
+                          content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(hintText: 'Например: проверить подключение')),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+                            FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim().isNotEmpty), child: const Text('Добавить')),
+                          ],
+                        ));
+                        if (ok == true) await _advanced.addCheckpoint(t.id, controller.text);
+                        controller.dispose();
+                        if (mounted) setState(_reload);
+                      },
+                      icon: const Icon(Icons.add_task), label: const Text('Добавить контрольную точку'),
+                    ),
+                  ]);
+                },
+              ),
+            ],
+          ));
         });
       })),
     ]),
