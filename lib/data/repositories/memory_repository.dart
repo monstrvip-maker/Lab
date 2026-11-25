@@ -53,7 +53,7 @@ class MemoryRepository {
   }
 
   List<String> _terms(String text) => text.toLowerCase()
-      .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+      .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
       .where((word) => word.length >= 3)
       .toList();
 
