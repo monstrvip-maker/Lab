@@ -17,7 +17,7 @@ class AgentOrchestrator {
   ];
 
   String _compact(String value, {int limit = 900}) {
-    final normalized = value.replaceAll(RegExp(r'\\s+'), ' ').trim();
+    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
     return normalized.length <= limit ? normalized : '${normalized.substring(0, limit)}…';
   }
 
