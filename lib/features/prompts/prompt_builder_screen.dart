@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../../data/repositories/prompt_repository.dart';
+import '../../ai/prompts/prompt_quality_analyzer.dart';
 
 class PromptBuilderScreen extends StatefulWidget {
   const PromptBuilderScreen({super.key, this.initialText = ''});
@@ -19,6 +20,8 @@ class _PromptBuilderScreenState extends State<PromptBuilderScreen> {
   bool _working = false;
   bool _saved = false;
   String? _error;
+
+  PromptQualityReport get _quality => PromptQualityAnalyzer.analyze(_input.text);
 
   bool get _isLedProject => RegExp(
     r'led.?лен|led.?strip|ws2812|esp32|адресн.*лент',
@@ -174,6 +177,14 @@ $ledContext
             ),
           ),
         ],
+        const SizedBox(height: 10),
+        Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [Expanded(child: Text('Качество исходного запроса', style: Theme.of(context).textTheme.titleSmall)), Text('${_quality.score}/100', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))]),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: _quality.score / 100),
+          const SizedBox(height: 8),
+          if (_quality.missing.isEmpty) const Text('Хорошая структура. Можно создавать промт.') else ..._quality.missing.take(4).map((item) => Padding(padding: const EdgeInsets.only(top: 3), child: Text('• $item', style: Theme.of(context).textTheme.bodySmall))),
+        ]))),
         const SizedBox(height: 12),
         FilledButton.icon(
           onPressed: _working ? null : _buildPrompt,
