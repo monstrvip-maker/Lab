@@ -194,10 +194,16 @@ class _AiScreenState extends State<AiScreen> {
     final response = StringBuffer();
     try {
       final memories = await _memory.relevant(text, limit: 5);
-      final memoryContext = memories.isEmpty
-          ? ''
-          : 'Подтверждённая память пользователя (используй только если релевантно; не выдумывай):\n' +
-              memories.map((m) => '- [${m.category}] ${m.title}: ${m.content}').join('\n');
+      final feedback = await _memory.feedbackContext(limit: 4);
+      final memoryParts = <String>[];
+      if (memories.isNotEmpty) {
+        memoryParts.add('Подтверждённая память пользователя (используй только если релевантно; не выдумывай):\\n' +
+            memories.map((m) => '- [${m.category}] ${m.title}: ${m.content}').join('\\n'));
+      }
+      if (feedback.isNotEmpty) {
+        memoryParts.add('Недавняя обратная связь пользователя по качеству ответов. Учитывай её как предпочтение стиля, но не меняй факты: \\n$feedback');
+      }
+      final memoryContext = memoryParts.join('\\n\\n');
       _lastTask = text;
       final stream = _agentMode
           ? AgentOrchestrator(_runtime).run(memoryContext.isEmpty ? text : '$memoryContext\n\nЗадача: $text')
