@@ -14,7 +14,7 @@ class AppDatabase {
     final dbPath = path.join(await getDatabasesPath(), 'prompt_lab_ai.db');
     final opened = await openDatabase(
       dbPath,
-      version: 4,
+      version: 5,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -105,6 +105,32 @@ class AppDatabase {
     await db.execute('CREATE INDEX IF NOT EXISTS idx_checkpoints_task ON task_checkpoints(task_id, is_done)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_prompt_tests_prompt ON prompt_tests(prompt_id, created_at DESC)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_knowledge_sources_date ON knowledge_sources(imported_at DESC)');
+  }
+
+
+  Future<void> _createLearningSchema(Database db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS learning_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      learned_count INTEGER NOT NULL DEFAULT 0,
+      saved_prompt_count INTEGER NOT NULL DEFAULT 0,
+      cycle_count INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    )''');
+    await db.execute('''INSERT OR IGNORE INTO learning_state
+      (id, learned_count, saved_prompt_count, cycle_count, updated_at)
+      VALUES (1, 0, 0, 0, '')''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS learning_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      topic TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      prompt_id INTEGER,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(prompt_id) REFERENCES prompts(id) ON DELETE SET NULL
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_learning_history_created ON learning_history(created_at DESC)');
   }
 
   Future<void> _createWorkspaceSchema(Database db) async {
