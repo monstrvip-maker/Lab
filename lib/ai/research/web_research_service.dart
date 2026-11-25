@@ -81,41 +81,39 @@ class WebResearchService {
     final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
     document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form').forEach((e) => e.remove());
 
-    final selectors = switch (engine) {
-      SearchProvider.google => [
-          'a:has(h3)',
-          'a.MjjYud',
-        ],
-      SearchProvider.yandex => [
-          'a.Link',
-          'a.OrganicTitle-Link',
-          'a[data-testid="serp-item"] a',
-        ],
-      SearchProvider.duckDuckGo => [
-          'a.result__a',
-          'a.result-link',
-        ],
-      SearchProvider.all => const <String>[],
-    };
-
     final results = <WebResearchResult>[];
     final seen = <String>{};
-    for (final selector in selectors) {
-      for (final anchor in document.querySelectorAll(selector)) {
-        final title = anchor.text.trim();
-        final url = _resolveUrl(anchor.attributes['href'] ?? '', engine);
-        if (title.length < 3 || url == null || !seen.add(url)) continue;
-        final parent = anchor.parent?.parent ?? anchor.parent;
-        final snippet = parent?.querySelector(
-          '.VwiC3b, .IsZvec, .result__snippet, .OrganicText, .TextContainer, .text-container',
-        )?.text.trim() ?? '';
-        results.add(WebResearchResult(
-          title: title,
-          url: url,
-          snippet: snippet,
-          provider: _label(engine),
-        ));
-      }
+    // Avoid CSS :has(): the Dart html parser does not implement it.
+    // Parse anchors structurally so minor SERP class changes do not break Google.
+    final anchors = document.querySelectorAll('a[href]');
+    for (final anchor in anchors) {
+      final href = anchor.attributes['href'] ?? '';
+      final heading = anchor.querySelector('h3');
+      final title = switch (engine) {
+        SearchProvider.google => heading?.text.trim() ?? '',
+        SearchProvider.yandex => _firstNonEmpty([
+            anchor.querySelector('.OrganicTitle, .OrganicTitle-Link, h2, h3')?.text,
+            anchor.attributes['aria-label'],
+            anchor.text,
+          ]),
+        SearchProvider.duckDuckGo => _firstNonEmpty([
+            anchor.querySelector('.result__title')?.text,
+            anchor.text,
+          ]),
+        SearchProvider.all => '',
+      };
+      final url = _resolveUrl(href, engine);
+      if (title.length < 3 || url == null || !seen.add(url)) continue;
+      final parent = anchor.parent?.parent ?? anchor.parent;
+      final snippet = parent?.querySelector(
+        '.VwiC3b, .IsZvec, .result__snippet, .OrganicText, .TextContainer, .text-container, .result__body',
+      )?.text.trim() ?? '';
+      results.add(WebResearchResult(
+        title: title.replaceAll(RegExp(r'\\s+'), ' '),
+        url: url,
+        snippet: snippet,
+        provider: _label(engine),
+      ));
     }
     if (results.isEmpty) {
       throw StateError('Выдача пуста или поисковик показал CAPTCHA/антибот-проверку.');
@@ -123,7 +121,7 @@ class WebResearchService {
     return results.take(10).toList();
   }
 
-  String? _resolveUrl(String href, SearchProvider engine) {
+  String _firstNonEmpty(List<String?> values) => values\n      .map((value) => value?.trim() ?? '')\n      .firstWhere((value) => value.isNotEmpty, orElse: () => '');\n\n  String? _resolveUrl(String href, SearchProvider engine) {
     if (href.isEmpty) return null;
     final uri = Uri.tryParse(href);
     if (uri == null) return null;
