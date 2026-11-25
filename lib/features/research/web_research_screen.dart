@@ -155,38 +155,44 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       PromptTemplateQualityAnalyzer.analyze(value).isUsable;
 
   bool _hasPromptEvidence(WebResearchResult result) {
-    final searchable = '${result.title} ${result.snippet} ${result.url}'.toLowerCase();
+    final uri = Uri.tryParse(result.url);
+    final searchable = '\${result.title} \${result.snippet} \${uri?.path ?? ''}'.toLowerCase();
     return RegExp(
       r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
-      r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?',
+      r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?|'
+      r'prompt[-_ ]?base|awesome[-_ ]?prompts|chatgpt[-_ ]?prompts',
       caseSensitive: false,
     ).hasMatch(searchable);
   }
 
   int _candidateScore(WebResearchResult result, String topic, String query) {
-    // Reject generic articles, documentation and AI news before downloading
-    // their pages. A source must explicitly look like a prompt resource.
-    if (!_hasPromptEvidence(result)) return -100;
-    final terms = '$topic $query'
+    // Search requests are already prompt-only. Search snippets may be sparse,
+    // so absence of the word "prompt" in a snippet is not a reason to discard
+    // a URL. The page reader, Qwen extraction and quality analyzer are the
+    // strict gates before a prompt can be saved.
+    final terms = '\${topic} \${query}'
         .toLowerCase()
         .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
-        .where((word) => word.length > 2)
+        .where((word) => word.length > 2 &&
+            !{'the','and','for','with','prompt','prompts','template','templates','пример','промты','промт','промпты','шаблоны'}.contains(word))
         .toSet();
     final title = result.title.toLowerCase();
     final snippet = result.snippet.toLowerCase();
-    var score = 8; // explicit prompt-related evidence
+    final uri = Uri.tryParse(result.url);
+    final path = (uri?.path ?? '').toLowerCase();
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
+        title.trim().length < 4) return -100;
+    final explicit = _hasPromptEvidence(result);
+    var score = explicit ? 10 : 0;
     for (final term in terms) {
       if (title.contains(term)) score += 5;
       if (snippet.contains(term)) score += 2;
     }
-    if (RegExp(r'prompt|промт|промпт', caseSensitive: false).hasMatch(title)) {
-      score += 8;
+    if (RegExp(r'template|шаблон|library|библиотек|collection|коллекц|awesome|prompts', caseSensitive: false).hasMatch('\${title} \${snippet} \${path}')) {
+      score += 5;
     }
-    if (RegExp(r'template|шаблон|library|библиотек|collection|коллекц', caseSensitive: false).hasMatch('$title $snippet')) {
-      score += 4;
-    }
-    if (snippet.length < 45) score -= 2;
-    if (title.length < 12) score -= 2;
+    if (snippet.length < 25) score -= 1;
+    if (title.length < 12) score -= 1;
     return score;
   }
 
