@@ -144,7 +144,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     if (normalized.length < 140) return false;
     final words = normalized
         .toLowerCase()
-        .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
         .where((word) => word.length > 2)
         .toSet();
     return words.length >= 22 &&
@@ -160,15 +160,15 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final hasProcess = text.contains('алгоритм') || text.contains('шаг') ||
         text.contains('порядок работы') || text.contains('этап');
     final hasOutput = text.contains('формат') || text.contains('результат:');
-    final hasPlaceholder = RegExp(r'\\[[^\\]]{2,}\\]').hasMatch(value);
+    final hasPlaceholder = RegExp(r'\\[[^\]]{2,}\]').hasMatch(value);
     return hasRole && hasGoal && hasInput && hasProcess && hasOutput && hasPlaceholder;
   }
 
   String _normalizeForDuplicateCheck(String value) => value
       .toLowerCase()
-      .replaceAll(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true), ' ')
+      .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
       .trim()
-      .replaceAll(RegExp(r'\\s+'), ' ');
+      .replaceAll(RegExp(r'\s+'), ' ');
 
   Future<void> _learningCycle() async {
     _busy = true;
@@ -197,6 +197,9 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
 ${knowledgeContext.isEmpty ? 'Пока нет.' : knowledgeContext}
 Уже сохранённые промты:
 ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
+Недавно изученные темы и источники — НЕ ПОВТОРЯЙ их:
+${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
+Выбирай узкую, проверяемую тему с доступными первичными источниками. Избегай общих и повторяющихся тем.
 Верни строго две строки:
 ТЕМА: короткое название
 ПОИСК: конкретный поисковый запрос на русском или английском
