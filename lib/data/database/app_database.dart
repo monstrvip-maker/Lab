@@ -76,6 +76,9 @@ class AppDatabase {
     if (oldVersion < 4) {
       await _createAdvancedSchema(db);
     }
+    if (oldVersion < 5) {
+      await _createLearningSchema(db);
+    }
   }
 
   Future<void> _createAdvancedSchema(Database db) async {
