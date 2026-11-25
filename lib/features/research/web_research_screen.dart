@@ -227,6 +227,30 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     return selected;
   }
 
+  String _buildFallbackPrompt(String topic, String summary, String sourceUrl) =>
+      'РОЛЬ: Ты — эксперт-практик по теме «$topic», работающий строго на основе входных данных.\\n'
+      'ЦЕЛЬ: [Опиши измеримый результат, который требуется получить].\\n'
+      'ВХОДНЫЕ ДАННЫЕ: [Контекст, материалы, аудитория, инструменты и ограничения].\\n'
+      'ПРИНЦИПЫ ИЗ ИССЛЕДОВАНИЯ:\\n$summary\\n'
+      'АЛГОРИТМ РАБОТЫ:\\n'
+      '1. Уточни цель и критерии успешного результата.\\n'
+      '2. Проверь полноту входных данных; перечисли критические пробелы.\\n'
+      '3. Разбей задачу на этапы и выполни их последовательно.\\n'
+      '4. Для каждого существенного вывода укажи основание и допущения.\\n'
+      '5. Проверь результат на ошибки, противоречия и соответствие критериям.\\n'
+      'ОГРАНИЧЕНИЯ: Не выдумывай факты, ссылки, цифры и результаты проверок. Отделяй подтверждённое от предположений. Если данных недостаточно — задай уточняющий вопрос.\\n'
+      'ФОРМАТ ОТВЕТА: [Структура результата, таблица/список при необходимости, выводы и следующие действия].\\n'
+      'КРИТЕРИИ КАЧЕСТВА: Точность, проверяемость, практическая применимость, полнота, отсутствие повторов.\\n'
+      'ИСТОЧНИК ДЛЯ СПРАВКИ: $sourceUrl';
+
+  bool _isNearDuplicatePrompt(String candidate, String existing) {
+    final a = _normalizeForDuplicateCheck(candidate).split(' ').where((word) => word.length > 3).toSet();
+    final b = _normalizeForDuplicateCheck(existing).split(' ').where((word) => word.length > 3).toSet();
+    if (a.isEmpty || b.isEmpty) return false;
+    final union = a.union(b).length;
+    return union > 0 && a.intersection(b).length / union >= 0.82;
+  }
+
   Future<void> _learningCycle() async {
     _busy = true;
     try {
@@ -357,9 +381,9 @@ $page
           }
           var templateTitle = titleMatch?.group(1)?.trim() ?? '';
           var template = templateMatch?.group(1)?.trim() ?? '';
-          if (template.length < 100 || template.toUpperCase() == 'НЕТ') {
+          if (!_isUsefulPromptTemplate(template)) {
             templateTitle = 'Исследование: $topic — практический промт';
-            template = 'РОЛЬ: Ты — практикующий специалист по теме «$topic».\nЦЕЛЬ: [Какой конкретный результат нужно получить].\nВХОДНЫЕ ДАННЫЕ: [Контекст, исходные материалы, аудитория и ограничения].\nПРИНЦИПЫ ИЗ ИССЛЕДОВАНИЯ:\n$summary\nАЛГОРИТМ РАБОТЫ:\n1. Проанализируй входные данные и выдели неизвестное.\n2. Примени только относящиеся к задаче принципы исследования.\n3. Составь решение по шагам и проверь его на противоречия.\n4. Отдели подтверждённые сведения от предположений.\nОГРАНИЧЕНИЯ: Не выдумывай факты, версии, ссылки и результаты проверок. Если данных недостаточно — явно укажи это.\nФОРМАТ ОТВЕТА: [Структура и детализация результата].\nКРИТЕРИИ КАЧЕСТВА: Точность, применимость, проверяемость, полнота и отсутствие повторов.\nИСТОЧНИК ДЛЯ КОНТЕКСТА: ${result.url}';
+            template = _buildFallbackPrompt(topic, summary, result.url);
           }
           if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
           final templateIsUseful = _isUsefulPromptTemplate(template);
@@ -374,7 +398,7 @@ $page
             final saved = _normalizeForDuplicateCheck(p.originalText);
             return (p.sourceUrl == result.url &&
                     p.title.toLowerCase() == templateTitle.toLowerCase()) ||
-                (saved.isNotEmpty && saved == normalizedTemplate);
+                (saved.isNotEmpty && (saved == normalizedTemplate || _isNearDuplicatePrompt(template, p.originalText)));
           });
           int? promptId;
           if (templateIsUseful && !duplicate) {
