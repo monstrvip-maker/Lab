@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,7 +7,9 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Android on-device inference service. Model weights stay in app-private storage.
+/// Single-owner runtime for the native llama controller.
+/// All inference requests are serialized because the native controller supports
+/// only one active generation at a time.
 class LocalAiRuntime extends ChangeNotifier {
   LocalAiRuntime._();
 
@@ -18,14 +21,16 @@ class LocalAiRuntime extends ChangeNotifier {
   String? _error;
   bool _isLoading = false;
   bool _isLoaded = false;
+  bool _isGenerating = false;
   dynamic _gpuInfo;
+  Future<void> _generationTail = Future<void>.value();
 
   String? get modelPath => _modelPath;
-  String? get modelName =>
-      _modelPath == null ? null : path.basename(_modelPath!);
+  String? get modelName => _modelPath == null ? null : path.basename(_modelPath!);
   String? get error => _error;
   bool get isLoading => _isLoading;
   bool get isLoaded => _isLoaded;
+  bool get isGenerating => _isGenerating;
   dynamic get gpuInfo => _gpuInfo;
 
   Future<void> initialize() async {
@@ -44,22 +49,13 @@ class LocalAiRuntime extends ChangeNotifier {
     if (!sourcePath.toLowerCase().endsWith('.gguf')) {
       throw const FormatException('Поддерживаются только модели в формате GGUF.');
     }
-    if (!await source.exists()) {
-      throw FileSystemException('Файл модели не найден.', sourcePath);
-    }
-
+    if (!await source.exists()) throw FileSystemException('Файл модели не найден.', sourcePath);
     final supportDirectory = await getApplicationSupportDirectory();
     final modelsDirectory = Directory(path.join(supportDirectory.path, 'models'));
     await modelsDirectory.create(recursive: true);
-
-    final originalName = path.basename(sourcePath);
-    final safeName = originalName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
-    final destination = File(path.join(
-      modelsDirectory.path,
-      '${DateTime.now().microsecondsSinceEpoch}_$safeName',
-    ));
+    final safeName = path.basename(sourcePath).replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final destination = File(path.join(modelsDirectory.path, '${DateTime.now().microsecondsSinceEpoch}_$safeName'));
     await source.copy(destination.path);
-
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_modelPathKey, destination.path);
     _modelPath = destination.path;
@@ -85,11 +81,9 @@ class LocalAiRuntime extends ChangeNotifier {
       return;
     }
     if (_isLoaded || _isLoading) return;
-
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
       _controller ??= LlamaController();
       _gpuInfo ??= await _controller!.detectGpu();
@@ -102,7 +96,7 @@ class LocalAiRuntime extends ChangeNotifier {
       );
       _isLoaded = true;
     } catch (error) {
-      _error = 'Не удалось загрузить модель. Проверьте файл и свободную память. $error';
+      _error = 'Не удалось загрузить GGUF-модель. Проверьте целостность файла и свободную память. $error';
       _isLoaded = false;
     } finally {
       _isLoading = false;
@@ -114,32 +108,56 @@ class LocalAiRuntime extends ChangeNotifier {
     required List<ChatMessage> messages,
     int maxTokens = 512,
     double temperature = 0.7,
-  }) {
-    final controller = _controller;
-    if (!_isLoaded || controller == null) {
-      return Stream<String>.error(
-        StateError('Локальная модель не загружена. Откройте менеджер моделей.'),
-      );
+  }) async* {
+    final previous = _generationTail;
+    final release = Completer<void>();
+    _generationTail = release.future;
+    await previous;
+
+    try {
+      final controller = _controller;
+      if (!_isLoaded || controller == null) {
+        throw StateError('Локальная модель не загружена. Откройте менеджер моделей.');
+      }
+      _isGenerating = true;
+      _error = null;
+      notifyListeners();
+      try {
+        yield* controller.generateChat(
+          messages: messages,
+          template: 'chatml',
+          maxTokens: maxTokens,
+          temperature: temperature,
+        );
+      } catch (error) {
+        final details = error.toString();
+        if (details.toLowerCase().contains('decode prompt')) {
+          throw StateError(
+            'Нативный движок не смог разобрать входной prompt. '
+            'Проверьте совместимость GGUF-модели с chat template (сейчас используется ChatML), '
+            'целостность файла и версию llama_flutter_android. Подробности: $details',
+          );
+        }
+        rethrow;
+      }
+    } finally {
+      _isGenerating = false;
+      release.complete();
+      notifyListeners();
     }
-    return controller.generateChat(
-      messages: messages,
-      template: 'chatml',
-      maxTokens: maxTokens,
-      temperature: temperature,
-    );
   }
 
   Future<void> stop() async {
-    await _controller?.stop();
+    if (_isGenerating) await _controller?.stop();
   }
 
   Future<void> unloadModel() async {
+    // Wait until any queued generation has released the native controller.
+    await _generationTail;
     final controller = _controller;
     _controller = null;
     _isLoaded = false;
-    if (controller != null) {
-      await controller.dispose();
-    }
+    if (controller != null) await controller.dispose();
     notifyListeners();
   }
 }
