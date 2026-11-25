@@ -270,7 +270,7 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
         'Промты для создания изображений и творческих задач',
         'Промты для планирования и деловых задач',
       ];
-      if (topic.isEmpty || topic.length > 120) {
+      if (topic.isEmpty || topic.length > 120 || topic.toLowerCase().contains('короткое название') || topic.toLowerCase().contains('[тема]')) {
         topic = fallbackTopics[_topicCursor % fallbackTopics.length];
       }
       if (query.length < 4 || query.length > 220) {
