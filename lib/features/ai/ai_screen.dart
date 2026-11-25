@@ -7,7 +7,9 @@ import '../prompts/prompt_library_screen.dart';
 import 'model_manager_screen.dart';
 
 class AiScreen extends StatefulWidget {
-  const AiScreen({super.key});
+  const AiScreen({super.key, this.startInAgentMode = false});
+
+  final bool startInAgentMode;
 
   @override
   State<AiScreen> createState() => _AiScreenState();
@@ -19,11 +21,12 @@ class _AiScreenState extends State<AiScreen> {
   final List<ChatMessage> _history = [];
   final List<_ChatLine> _lines = [];
   bool _generating = false;
-  bool _agentMode = false;
+  late bool _agentMode;
 
   @override
   void initState() {
     super.initState();
+    _agentMode = widget.startInAgentMode;
     _runtime.initialize();
   }
 
