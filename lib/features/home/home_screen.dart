@@ -50,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _FeatureTile(icon: Icons.psychology_alt_outlined, title: 'База знаний', subtitle: 'Локальные заметки, теги и поиск', onTap: _openKnowledge),
       _FeatureTile(icon: Icons.psychology, title: 'Самообучение и память AI', subtitle: 'Факты, предпочтения, правила и обратная связь', onTap: _openMemory),
       _FeatureTile(icon: Icons.hub_outlined, title: 'AI-агенты', subtitle: 'Роли, сценарии и задачи', onTap: _openAgents),
-      _FeatureTile(icon: Icons.travel_explore_outlined, title: 'Центр исследований', subtitle: 'Поиск в интернете, изучение страниц локальной Qwen и сохранение знаний', onTap: _openResearch),
+      _FeatureTile(icon: Icons.travel_explore_outlined, title: 'Автообучение Qwen', subtitle: 'Qwen сама ищет знания и накапливает новые промты без ручных запросов', onTap: _openResearch),
       _FeatureTile(icon: Icons.backup_outlined, title: 'Импорт, экспорт и инструменты', subtitle: 'Резервные копии, перенос данных и импорт TXT/Markdown', onTap: _openWorkspaceTools),
     ],
   );
