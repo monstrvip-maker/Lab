@@ -33,8 +33,10 @@ jobs:
       - name: Generate Android platform files
         run: flutter create --platforms=android .
 
-      - name: Set Android minimum SDK for llama.cpp
-        run: sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 26/' android/app/build.gradle.kts
+      - name: Set Android minimum SDK and internet permission
+        run: |
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 26/' android/app/build.gradle.kts
+          sed -i '/<application/i\\    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
 
       - name: Install dependencies
         run: flutter pub get
