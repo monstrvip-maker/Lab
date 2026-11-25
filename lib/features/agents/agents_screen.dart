@@ -54,7 +54,7 @@ class AgentsScreen extends StatelessWidget {
             ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: _start,
+            onPressed: () => _start(context),
             icon: const Icon(Icons.play_arrow),
             label: const Text('Начать задачу с агентами'),
           ),
