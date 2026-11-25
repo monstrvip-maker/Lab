@@ -75,6 +75,24 @@ class _ProjectDetailScreenState extends State<_ProjectDetailScreen> {
   void initState() { super.initState(); _reload(); }
   void _reload() { _future = widget.repository.tasks(widget.project.id); }
 
+  Future<void> _manageDependencies(ProjectTask task) async {
+    final allTasks = await widget.repository.tasks(widget.project.id);
+    final current = await _advanced.dependencies(task.id);
+    final existingIds = current.map((row) => row['id'] as int).toSet();
+    final candidates = allTasks.where((item) => item.id != task.id && !existingIds.contains(item.id)).toList();
+    if (!mounted) return;
+    await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      title: Text('Зависимости: ' + task.title),
+      content: SizedBox(width: 520, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Задача не может быть завершена, пока зависимости не имеют статус «Готово».'),
+        if (current.isEmpty) const Text('Зависимостей пока нет.'),
+        for (final row in current) ListTile(dense: true, title: Text(row['title'] as String), subtitle: Text(row['status'] as String), trailing: IconButton(icon: const Icon(Icons.remove_circle_outline), onPressed: () async { await _advanced.removeDependency(task.id, row['id'] as int); if (ctx.mounted) Navigator.pop(ctx); if (mounted) _manageDependencies(task); })),
+        const Divider(), const Text('Добавить зависимость'),
+        for (final candidate in candidates) ListTile(dense: true, title: Text(candidate.title), trailing: IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () async { try { await _advanced.addDependency(task.id, candidate.id); if (ctx.mounted) Navigator.pop(ctx); if (mounted) setState(_reload); } catch (error) { if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(error.toString()))); } })),
+      ]))),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть'))],
+    ));
+  }
   Future<void> _addTask() async {
     final title = TextEditingController();
     final details = TextEditingController();
@@ -119,7 +137,13 @@ class _ProjectDetailScreenState extends State<_ProjectDetailScreen> {
             subtitle: Text(t.details.isEmpty ? t.status : '${t.status} · ${t.details}', maxLines: 2, overflow: TextOverflow.ellipsis),
             trailing: PopupMenuButton<String>(onSelected: (v) async {
               if (v == 'delete') { await widget.repository.deleteTask(t.id); }
-              else { await widget.repository.updateTaskStatus(t.id, v); }
+              else {
+                if (v == 'Готово' && !await _advanced.canCompleteTask(t.id)) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сначала заверши все задачи-зависимости.')));
+                  return;
+                }
+                await widget.repository.updateTaskStatus(t.id, v);
+              }
               if (mounted) setState(_reload);
             }, itemBuilder: (_) => const [
               PopupMenuItem(value: 'Запланировано', child: Text('Запланировано')),
@@ -129,6 +153,7 @@ class _ProjectDetailScreenState extends State<_ProjectDetailScreen> {
               PopupMenuItem(value: 'delete', child: Text('Удалить')),
             ]),
             children: [
+              Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _manageDependencies(t), icon: const Icon(Icons.account_tree_outlined), label: const Text('Зависимости'))),
               FutureBuilder<List<TaskCheckpoint>>(
                 future: _advanced.checkpoints(t.id),
                 builder: (context, checkpointSnap) {
