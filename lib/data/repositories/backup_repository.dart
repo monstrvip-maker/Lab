@@ -25,10 +25,13 @@ class BackupRepository {
       dialogTitle: 'Выберите папку Documents/PromptLabAI для резервных копий',
     );
     if (selected == null || selected.isEmpty) return null;
-    final directory = Directory(selected);
+    final folder = path.basename(selected).toLowerCase() == 'promptlabai'
+        ? selected
+        : path.join(selected, 'PromptLabAI');
+    final directory = Directory(folder);
     if (!await directory.exists()) await directory.create(recursive: true);
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_folderKey, selected);
+    await preferences.setString(_folderKey, folder);
     return selected;
   }
 
