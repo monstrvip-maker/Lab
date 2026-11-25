@@ -3,9 +3,32 @@ import 'package:flutter/material.dart';
 import '../ai/model_manager_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../workspace/workspace_tools_screen.dart';
+import '../../data/repositories/backup_repository.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _chooseBackupFolder(BuildContext context) async {
+    try {
+      final folder = await BackupRepository().chooseBackupFolder();
+      if (!context.mounted || folder == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Автосохранение включено. Копия создаётся при сворачивании приложения.')),
+      );
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось выбрать папку: $error')));
+    }
+  }
+
+  Future<void> _restoreBackup(BuildContext context) async {
+    try {
+      final count = await BackupRepository().restoreLatestFromFolder();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Восстановление завершено. Записей обработано: $count. Перезапустите приложение.')));
+    } catch (error) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось восстановить данные: $error')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -20,6 +43,18 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ModelManagerScreen()),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_copy_outlined),
+              title: const Text('Автокопия в Documents'),
+              subtitle: const Text('Выбрать папку для автоматического сохранения данных'),
+              onTap: () => _chooseBackupFolder(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings_backup_restore),
+              title: const Text('Восстановить данные из Documents'),
+              subtitle: const Text('После переустановки выберите папку с резервными копиями'),
+              onTap: () => _restoreBackup(context),
             ),
             ListTile(
               leading: const Icon(Icons.storage_outlined),
