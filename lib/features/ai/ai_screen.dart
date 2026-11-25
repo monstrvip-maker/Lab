@@ -345,6 +345,53 @@ class _AiScreenState extends State<AiScreen> {
                                     textAlign: TextAlign.center,
                                     style: Theme.of(context).textTheme.bodyMedium,
                                   ),
+                                  if (_runtime.isLoaded) ...[
+                                    const SizedBox(height: 18),
+                                    Text(
+                                      'Быстрый старт',
+                                      style: Theme.of(context).textTheme.titleSmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      alignment: WrapAlignment.center,
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        ActionChip(
+                                          avatar: const Icon(Icons.code, size: 17),
+                                          label: const Text('Помоги с кодом'),
+                                          onPressed: () => setState(() {
+                                            _input.text = 'Помоги решить техническую задачу. Сначала уточни недостающие требования, затем предложи пошаговое решение.';
+                                            _input.selection = TextSelection.collapsed(offset: _input.text.length);
+                                          }),
+                                        ),
+                                        ActionChip(
+                                          avatar: const Icon(Icons.lightbulb_outline, size: 17),
+                                          label: const Text('Разобрать идею'),
+                                          onPressed: () => setState(() {
+                                            _input.text = 'Проанализируй мою идею: оцени пользу, сложность, риски и предложи план реализации.';
+                                            _input.selection = TextSelection.collapsed(offset: _input.text.length);
+                                          }),
+                                        ),
+                                        ActionChip(
+                                          avatar: const Icon(Icons.home_outlined, size: 17),
+                                          label: const Text('Умный дом'),
+                                          onPressed: () => setState(() {
+                                            _input.text = 'Помоги спроектировать решение для Home Assistant, ESPHome и умного дома. Укажи необходимые компоненты и этапы.';
+                                            _input.selection = TextSelection.collapsed(offset: _input.text.length);
+                                          }),
+                                        ),
+                                        ActionChip(
+                                          avatar: const Icon(Icons.auto_fix_high, size: 17),
+                                          label: const Text('Улучшить промт'),
+                                          onPressed: () => setState(() {
+                                            _input.text = 'Помоги улучшить следующий промт: сделай его точным, полным и проверяемым. Объясни, что изменил.';
+                                            _input.selection = TextSelection.collapsed(offset: _input.text.length);
+                                          }),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                   if (!_runtime.isLoaded) ...[
                                     const SizedBox(height: 16),
                                     FilledButton.icon(
