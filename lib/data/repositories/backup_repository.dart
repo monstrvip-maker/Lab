@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:sqflite/sqflite.dart';
 import '../database/app_database.dart';
 
 /// Portable JSON backup. Only app-owned tables are exported/imported.
