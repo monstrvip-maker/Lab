@@ -215,7 +215,6 @@ $page
           if (!duplicate && template.length >= 100) {
             promptId = await _prompts.create(title: templateTitle, originalText: template, category: 'Автообучение · $topic', sourceUrl: result.url);
           }
-          final db = await AppDatabase.instance.database;
           await db.transaction((txn) async {
             await txn.insert('learning_history', {'topic': topic, 'title': result.title, 'source_url': result.url, 'provider': result.provider, 'summary': summary, 'prompt_id': promptId, 'created_at': DateTime.now().toIso8601String()});
             await txn.rawUpdate('UPDATE learning_state SET learned_count = learned_count + 1, saved_prompt_count = saved_prompt_count + ?, updated_at = ? WHERE id = 1', [promptId == null ? 0 : 1, DateTime.now().toIso8601String()]);
