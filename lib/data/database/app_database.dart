@@ -59,6 +59,7 @@ class AppDatabase {
     await db.execute(
       'CREATE INDEX idx_prompts_category ON prompts(category)',
     );
+    await _createWorkspaceSchema(db);
   }
 
 
