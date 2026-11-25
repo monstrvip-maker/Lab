@@ -133,35 +133,82 @@ class BackupRepository {
         decoded['tables'] is! Map<String, dynamic>) {
       throw const FormatException('Файл не является резервной копией Prompt Lab AI.');
     }
+
+    final schema = decoded['schema'];
+    if (schema is int && (schema < 1 || schema > 6)) {
+      throw FormatException(
+        'Версия резервной копии ($schema) несовместима с этой версией приложения.',
+      );
+    }
+
     final tables = decoded['tables'] as Map<String, dynamic>;
     final db = await AppDatabase.instance.database;
     var count = 0;
     await db.transaction((txn) async {
-      // Parent tables are restored before dependent rows.
+      // Keep the explicit allowlist and parent-before-child restore order.
       for (final table in _tables) {
         final rows = tables[table];
         if (rows == null) continue;
-        if (rows is! List) throw FormatException('Некорректная таблица $table.');
+        if (rows is! List) {
+          throw FormatException('Некорректная таблица $table.');
+        }
+        final info = await txn.rawQuery('PRAGMA table_info($table)');
+        final allowedColumns = info
+            .map((column) => column['name'] as String)
+            .toSet();
         for (final raw in rows) {
-          if (raw is! Map) continue;
-          final row = Map<String, Object?>.from(raw);
-          // Ignore malformed/unknown columns through SQLite's strict schema check.
-          await txn.insert(table, row, conflictAlgorithm: ConflictAlgorithm.ignore);
-          count++;
+          if (raw is! Map) {
+            throw FormatException('Некорректная запись в таблице $table.');
+          }
+          final incoming = Map<String, Object?>.from(raw);
+          // Backups from newer builds may contain columns unknown to this
+          // installation. Drop only unknown columns; SQLite validates types,
+          // constraints and required fields inside the transaction.
+          final row = <String, Object?>{
+            for (final entry in incoming.entries)
+              if (allowedColumns.contains(entry.key)) entry.key: entry.value,
+          };
+          if (row.isEmpty) continue;
+          final inserted = await txn.insert(
+            table,
+            row,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+          if (inserted != -1) count++;
         }
       }
     });
+
+    // Restore ordinary preferences, but never restore a stale Android folder
+    // grant or credentials/secrets from an imported backup.
     final rawPreferences = decoded['preferences'];
     if (rawPreferences is Map) {
       final preferences = await SharedPreferences.getInstance();
       for (final entry in rawPreferences.entries) {
         final key = entry.key.toString();
+        final normalizedKey = key.toLowerCase();
+        if (key == _folderKey ||
+            normalizedKey.contains('token') ||
+            normalizedKey.contains('secret') ||
+            normalizedKey.contains('password') ||
+            normalizedKey.contains('api_key') ||
+            normalizedKey.contains('apikey') ||
+            normalizedKey.contains('credential')) {
+          continue;
+        }
         final value = entry.value;
-        if (value is String) await preferences.setString(key, value);
-        else if (value is bool) await preferences.setBool(key, value);
-        else if (value is int) await preferences.setInt(key, value);
-        else if (value is double) await preferences.setDouble(key, value);
-        else if (value is List) await preferences.setStringList(key, value.map((item) => item.toString()).toList());
+        if (value is String) {
+          await preferences.setString(key, value);
+        } else if (value is bool) {
+          await preferences.setBool(key, value);
+        } else if (value is int) {
+          await preferences.setInt(key, value);
+        } else if (value is double) {
+          await preferences.setDouble(key, value);
+        } else if (value is List &&
+            value.every((item) => item is String)) {
+          await preferences.setStringList(key, value.cast<String>());
+        }
       }
     }
     return count;
