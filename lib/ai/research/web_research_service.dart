@@ -3,87 +3,159 @@ import 'dart:convert';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
+enum SearchProvider { all, google, yandex, duckDuckGo }
+
 class WebResearchResult {
   const WebResearchResult({
     required this.title,
     required this.url,
     required this.snippet,
+    required this.provider,
   });
   final String title;
   final String url;
   final String snippet;
+  final String provider;
 }
 
-/// API-key-free search using DuckDuckGo's public HTML/Lite endpoints.
-/// Search availability depends on the provider's anti-bot limits and network access.
 class WebResearchService {
   WebResearchService({http.Client? client}) : _client = client ?? http.Client();
-
   final http.Client _client;
 
-  Future<List<WebResearchResult>> search(String query) async {
-    final normalized = query.trim();
-    if (normalized.isEmpty) return const [];
+  static const _userAgent =
+      'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36';
 
-    Object? firstError;
-    for (final endpoint in [
-      Uri.https('html.duckduckgo.com', '/html/', {'q': normalized}),
-      Uri.https('lite.duckduckgo.com', '/lite/', {'q': normalized}),
-    ]) {
+  Future<List<WebResearchResult>> search(
+    String query, {
+    SearchProvider provider = SearchProvider.all,
+  }) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final providers = provider == SearchProvider.all
+        ? [SearchProvider.google, SearchProvider.yandex, SearchProvider.duckDuckGo]
+        : [provider];
+    final collected = <String, WebResearchResult>{};
+    final errors = <String>[];
+
+    // Search engines are queried one by one: one blocked engine must not prevent
+    // results from the remaining providers.
+    for (final engine in providers) {
       try {
-        final response = await _client.get(endpoint, headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml',
-          'Accept-Language': 'ru,en;q=0.8',
-        }).timeout(const Duration(seconds: 20));
-        if (response.statusCode != 200) {
-          firstError ??= 'HTTP ${response.statusCode}';
-          continue;
+        final results = await _searchOne(q, engine);
+        for (final result in results) {
+          collected.putIfAbsent(result.url, () => result);
         }
-        final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
-        final candidates = <WebResearchResult>[];
-
-        for (final anchor in document.querySelectorAll('a.result__a, a.result-link')) {
-          final title = anchor.text.trim();
-          final href = _resolveResultUrl(anchor.attributes['href'] ?? '');
-          if (title.isEmpty || href == null) continue;
-          final parent = anchor.parent?.parent;
-          final snippet = parent?.querySelector('.result__snippet, .result-snippet, td')?.text.trim() ?? '';
-          candidates.add(WebResearchResult(title: title, url: href, snippet: snippet));
-        }
-
-        final unique = <String, WebResearchResult>{};
-        for (final result in candidates) {
-          unique.putIfAbsent(result.url, () => result);
-        }
-        if (unique.isNotEmpty) return unique.values.take(8).toList();
-        firstError ??= 'Поисковая выдача не содержит результатов или сервис показал проверку робота.';
-      } catch (error) {
-        firstError ??= error;
+      } catch (e) {
+        errors.add('${_label(engine)}: $e');
       }
     }
-    throw StateError(
-      'Не удалось получить выдачу DuckDuckGo. Сервис может временно ограничивать автоматические запросы. '
-      'Попробуйте позже или откройте сайт поиска в браузере. Подробности: $firstError',
-    );
+    if (collected.isEmpty) {
+      throw StateError(errors.isEmpty
+          ? 'Поисковики не вернули результатов. Возможно, сработала антибот-защита.'
+          : 'Не удалось получить выдачу. ${errors.join(' | ')}');
+    }
+    return collected.values.take(18).toList();
   }
 
-  String? _resolveResultUrl(String href) {
+  Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine) async {
+    late final Uri uri;
+    switch (engine) {
+      case SearchProvider.google:
+        uri = Uri.https('www.google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru'});
+      case SearchProvider.yandex:
+        uri = Uri.https('yandex.com', '/search/', {'text': query, 'lang': 'ru'});
+      case SearchProvider.duckDuckGo:
+        uri = Uri.https('html.duckduckgo.com', '/html/', {'q': query});
+      case SearchProvider.all:
+        throw ArgumentError('Select a concrete search engine');
+    }
+
+    final response = await _client.get(uri, headers: {
+      'User-Agent': _userAgent,
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'ru,en;q=0.8',
+    }).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw StateError('HTTP ${response.statusCode}');
+    }
+    final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
+    document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form').forEach((e) => e.remove());
+
+    final selectors = switch (engine) {
+      SearchProvider.google => [
+          'a:has(h3)',
+          'a.MjjYud',
+        ],
+      SearchProvider.yandex => [
+          'a.Link',
+          'a.OrganicTitle-Link',
+          'a[data-testid="serp-item"] a',
+        ],
+      SearchProvider.duckDuckGo => [
+          'a.result__a',
+          'a.result-link',
+        ],
+      SearchProvider.all => const <String>[],
+    };
+
+    final results = <WebResearchResult>[];
+    final seen = <String>{};
+    for (final selector in selectors) {
+      for (final anchor in document.querySelectorAll(selector)) {
+        final title = anchor.text.trim();
+        final url = _resolveUrl(anchor.attributes['href'] ?? '', engine);
+        if (title.length < 3 || url == null || !seen.add(url)) continue;
+        final parent = anchor.parent?.parent ?? anchor.parent;
+        final snippet = parent?.querySelector(
+          '.VwiC3b, .IsZvec, .result__snippet, .OrganicText, .TextContainer, .text-container',
+        )?.text.trim() ?? '';
+        results.add(WebResearchResult(
+          title: title,
+          url: url,
+          snippet: snippet,
+          provider: _label(engine),
+        ));
+      }
+    }
+    if (results.isEmpty) {
+      throw StateError('Выдача пуста или поисковик показал CAPTCHA/антибот-проверку.');
+    }
+    return results.take(10).toList();
+  }
+
+  String? _resolveUrl(String href, SearchProvider engine) {
     if (href.isEmpty) return null;
     final uri = Uri.tryParse(href);
     if (uri == null) return null;
-    if (uri.host.contains('duckduckgo.com')) {
+    if (engine == SearchProvider.duckDuckGo && uri.host.contains('duckduckgo.com')) {
       final target = uri.queryParameters['uddg'];
-      if (target != null) {
-        final decoded = Uri.tryParse(target);
-        if (decoded != null && (decoded.scheme == 'https' || decoded.scheme == 'http')) {
-          return decoded.toString();
-        }
-      }
+      if (target != null) return _validHttp(target);
     }
-    if (uri.scheme == 'https' || uri.scheme == 'http') return uri.toString();
-    return null;
+    if (engine == SearchProvider.google && uri.path == '/url') {
+      final target = uri.queryParameters['q'];
+      if (target != null) return _validHttp(target);
+    }
+    if (engine == SearchProvider.yandex && uri.host.contains('yandex')) {
+      final target = uri.queryParameters['url'];
+      if (target != null) return _validHttp(target);
+    }
+    return _validHttp(href);
   }
+
+  String? _validHttp(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return null;
+    if (uri.host.contains('google.') || uri.host.contains('yandex.') ||
+        uri.host.contains('duckduckgo.com')) return null;
+    return uri.toString();
+  }
+
+  String _label(SearchProvider engine) => switch (engine) {
+    SearchProvider.google => 'Google',
+    SearchProvider.yandex => 'Яндекс',
+    SearchProvider.duckDuckGo => 'DuckDuckGo',
+    SearchProvider.all => 'Все поисковики',
+  };
 
   Future<String> readPage(String url) async {
     final uri = Uri.tryParse(url);
@@ -91,7 +163,7 @@ class WebResearchService {
       throw const FormatException('Недопустимый адрес страницы.');
     }
     final response = await _client.get(uri, headers: {
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
+      'User-Agent': _userAgent,
       'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
     }).timeout(const Duration(seconds: 25));
     if (response.statusCode < 200 || response.statusCode >= 400) {
