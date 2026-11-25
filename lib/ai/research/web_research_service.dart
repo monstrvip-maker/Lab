@@ -105,8 +105,8 @@ class WebResearchService {
 
   String _limit(String value) {
     final text = value.trim();
-    if (text.length <= 14000) return text;
-    return text.substring(0, 14000);
+    if (text.length <= 4800) return text;
+    return text.substring(0, 4800);
   }
 
   void dispose() => _client.close();
