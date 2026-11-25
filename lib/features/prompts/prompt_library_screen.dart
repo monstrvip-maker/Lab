@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../data/models/prompt_record.dart';
 import '../../data/repositories/prompt_repository.dart';
@@ -160,7 +161,7 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
                       child: ListTile(
                         title: Text(prompt.title, maxLines: 1, overflow: TextOverflow.ellipsis),
                         subtitle: Text(
-                          prompt.originalText,
+                          prompt.improvedText ?? prompt.originalText,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -176,12 +177,38 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
                           context: context,
                           builder: (context) => AlertDialog(
                             title: Text(prompt.title),
-                            content: SingleChildScrollView(child: SelectableText(prompt.originalText)),
+                            content: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Исходная задача', style: TextStyle(fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 6),
+                                SelectableText(prompt.originalText),
+                                if (prompt.improvedText != null && prompt.improvedText!.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 18),
+                                  const Divider(),
+                                  const SizedBox(height: 8),
+                                  const Text('Версия Qwen', style: TextStyle(fontWeight: FontWeight.w700)),
+                                  const SizedBox(height: 6),
+                                  SelectableText(prompt.improvedText!),
+                                ],
+                              ],
+                            ),
+                          ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context),
                                 child: const Text('Закрыть'),
                               ),
+                              if (prompt.improvedText != null && prompt.improvedText!.trim().isNotEmpty)
+                                TextButton(
+                                  onPressed: () {
+                                    Clipboard.setData(ClipboardData(text: prompt.improvedText!));
+                                    Navigator.pop(context);
+                                  },
+                                  child: const Text('Копировать Qwen'),
+                                ),
                               TextButton(
                                 onPressed: () async {
                                   Navigator.pop(context);
