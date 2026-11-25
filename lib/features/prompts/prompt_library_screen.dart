@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../data/models/prompt_record.dart';
 import '../../data/repositories/prompt_repository.dart';
 import '../../data/repositories/advanced_repository.dart';
+import '../../data/repositories/workspace_repository.dart';
 import 'prompt_test_screen.dart';
 
 class PromptLibraryScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class PromptLibraryScreen extends StatefulWidget {
 class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
   final PromptRepository _repository = PromptRepository();
   final AdvancedRepository _advanced = AdvancedRepository();
+  final WorkspaceRepository _projects = WorkspaceRepository();
   final TextEditingController _searchController = TextEditingController();
   late Future<List<PromptRecord>> _promptsFuture;
   bool _favoritesOnly = false;
@@ -98,6 +100,26 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
     bodyController.dispose();
   }
 
+
+
+  Future<void> _assignProject(PromptRecord prompt) async {
+    final projects = await _projects.projects();
+    if (!mounted) return;
+    final selected = await showDialog<int?>(context: context, builder: (ctx) => SimpleDialog(
+      title: const Text('Связать промт с проектом'),
+      children: [
+        SimpleDialogOption(onPressed: () => Navigator.pop(ctx, -1), child: const Text('Не связывать')),
+        for (final project in projects)
+          SimpleDialogOption(onPressed: () => Navigator.pop(ctx, project.id), child: Text(project.name)),
+      ],
+    ));
+    if (selected == null) return;
+    await _repository.assignProject(prompt.id!, selected == -1 ? null : selected);
+    if (mounted) {
+      setState(_reload);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Связь с проектом обновлена')));
+    }
+  }
 
   Future<void> _showVersions(PromptRecord prompt) async {
     final rows = await _advanced.promptVersions(prompt.id!);
@@ -260,6 +282,13 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
                                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => PromptTestScreen(prompt: prompt)));
                                 },
                                 child: const Text('Тестировать'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _assignProject(prompt);
+                                },
+                                child: const Text('Проект'),
                               ),
                               TextButton(
                                 onPressed: () {
