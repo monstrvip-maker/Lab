@@ -183,6 +183,50 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       .trim()
       .replaceAll(RegExp(r'\s+'), ' ');
 
+  int _candidateScore(WebResearchResult result, String topic, String query) {
+    final terms = '$topic $query'
+        .toLowerCase()
+        .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+        .where((word) => word.length > 2)
+        .toSet();
+    final title = result.title.toLowerCase();
+    final snippet = result.snippet.toLowerCase();
+    var score = 0;
+    for (final term in terms) {
+      if (title.contains(term)) score += 5;
+      if (snippet.contains(term)) score += 2;
+    }
+    final host = Uri.tryParse(result.url)?.host.toLowerCase() ?? '';
+    if (host.contains('docs.') || host.contains('developer.') ||
+        host.contains('github.com') || host.contains('arxiv.org') ||
+        host.endsWith('.gov') || host.endsWith('.edu')) {
+      score += 3;
+    }
+    if (snippet.length < 45) score -= 2;
+    if (title.length < 12) score -= 2;
+    return score;
+  }
+
+  List<WebResearchResult> _rankCandidateResults(
+    Iterable<WebResearchResult> candidates,
+    String topic,
+    String query,
+  ) {
+    final ranked = candidates.toList()
+      ..sort((a, b) => _candidateScore(b, topic, query)
+          .compareTo(_candidateScore(a, topic, query)));
+    final hosts = <String>{};
+    final selected = <WebResearchResult>[];
+    for (final item in ranked) {
+      final score = _candidateScore(item, topic, query);
+      final host = Uri.tryParse(item.url)?.host.toLowerCase() ?? item.url;
+      if (score < 2 || !hosts.add(host)) continue;
+      selected.add(item);
+      if (selected.length >= 8) break;
+    }
+    return selected;
+  }
+
   Future<void> _learningCycle() async {
     _busy = true;
     try {
@@ -260,9 +304,16 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
       if (collectedResults.isEmpty) {
         throw StateError('Поиск не вернул доступных материалов. ${searchErrors.join(' | ')}');
       }
-      final results = collectedResults.values.toList();
+      final results = _rankCandidateResults(
+        collectedResults.values,
+        topic,
+        query,
+      );
+      if (results.isEmpty) {
+        throw StateError('Поиск нашёл страницы, но их заголовки и описания недостаточно соответствуют теме. Следующий цикл выберет другой запрос.');
+      }
       var studied = 0;
-      for (final result in results.take(8)) {
+      for (final result in results) {
         if (_stopRequested || !mounted) break;
         try {
           final db = await AppDatabase.instance.database;
