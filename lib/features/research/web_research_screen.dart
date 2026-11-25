@@ -173,7 +173,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final hasProcess = text.contains('алгоритм') || text.contains('шаг') ||
         text.contains('порядок работы') || text.contains('этап');
     final hasOutput = text.contains('формат') || text.contains('результат:');
-    final hasPlaceholder = RegExp(r'\\[[^\]]{2,}\]').hasMatch(value);
+    final hasPlaceholder = RegExp(r'\[[^\]]{2,}\]').hasMatch(value);
     return hasRole && hasGoal && hasInput && hasProcess && hasOutput && hasPlaceholder;
   }
 
