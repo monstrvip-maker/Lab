@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../ai/model_manager_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
+import '../workspace/workspace_tools_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -20,10 +21,11 @@ class SettingsScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ModelManagerScreen()),
               ),
             ),
-            const ListTile(
-              leading: Icon(Icons.storage_outlined),
-              title: Text('Хранилище'),
-              subtitle: Text('База данных и резервные копии'),
+            ListTile(
+              leading: const Icon(Icons.storage_outlined),
+              title: const Text('Хранилище и резервные копии'),
+              subtitle: const Text('Экспорт, импорт и перенос базы знаний'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkspaceToolsScreen())),
             ),
             const ListTile(
               leading: Icon(Icons.notifications_outlined),
