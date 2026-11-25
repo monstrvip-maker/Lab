@@ -169,24 +169,36 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       .trim()
       .replaceAll(RegExp(r'\s+'), ' ');
 
+  bool _hasPromptEvidence(WebResearchResult result) {
+    final text = '${result.title} ${result.snippet} ${result.url}'.toLowerCase();
+    return RegExp(
+      r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
+      r'промт|промпт|шаблон[а-яё]*\\s+промпт?|готов[а-яё]*\\s+промпт?',
+      caseSensitive: false,
+    ).hasMatch(text);
+  }
+
   int _candidateScore(WebResearchResult result, String topic, String query) {
+    // Reject generic articles, documentation and AI news before downloading
+    // their pages. A source must explicitly look like a prompt resource.
+    if (!_hasPromptEvidence(result)) return -100;
     final terms = '$topic $query'
         .toLowerCase()
-        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
+        .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
         .where((word) => word.length > 2)
         .toSet();
     final title = result.title.toLowerCase();
     final snippet = result.snippet.toLowerCase();
-    var score = 0;
+    var score = 8; // explicit prompt-related evidence
     for (final term in terms) {
       if (title.contains(term)) score += 5;
       if (snippet.contains(term)) score += 2;
     }
-    final host = Uri.tryParse(result.url)?.host.toLowerCase() ?? '';
-    if (host.contains('docs.') || host.contains('developer.') ||
-        host.contains('github.com') || host.contains('arxiv.org') ||
-        host.endsWith('.gov') || host.endsWith('.edu')) {
-      score += 3;
+    if (RegExp(r'prompt|промт|промпт', caseSensitive: false).hasMatch(title)) {
+      score += 8;
+    }
+    if (RegExp(r'template|шаблон|library|библиотек|collection|коллекц', caseSensitive: false).hasMatch('$title $snippet')) {
+      score += 4;
     }
     if (snippet.length < 45) score -= 2;
     if (title.length < 12) score -= 2;
@@ -289,7 +301,10 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
       if (mounted) setState(() => _status = 'Ищу только промты по категории «$topic» в Google, Яндексе и DuckDuckGo…');
       final collectedResults = <String, WebResearchResult>{};
       final searchErrors = <String>[];
+      // Use Qwen's actual query (previously it was only used for ranking),
+      // while keeping every fallback explicitly constrained to prompt assets.
       final researchQueries = <String>{
+        '"$query" prompt template',
         '"$topic" prompt templates examples reusable prompts',
         '"$topic" готовые промты шаблоны примеры',
         'prompt library $topic system prompt template',
