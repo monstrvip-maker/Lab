@@ -64,6 +64,7 @@ class WebResearchService {
     switch (engine) {
       case SearchProvider.google:
         candidates = [
+          Uri.https('www.google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru', 'udm': '14'}),
           Uri.https('www.google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru'}),
           Uri.https('google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru'}),
         ];
@@ -121,6 +122,7 @@ class WebResearchService {
         SearchProvider.google => _firstNonEmpty([
             heading?.text,
             anchor.querySelector('.LC20lb, h2, h3')?.text,
+            anchor.text,
           ]),
         SearchProvider.yandex => _firstNonEmpty([
             anchor.querySelector('.OrganicTitle, .OrganicTitle-Link, h2, h3')?.text,
