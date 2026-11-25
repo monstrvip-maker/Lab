@@ -62,6 +62,7 @@ class AppDatabase {
     await _createWorkspaceSchema(db);
     await _createMemorySchema(db);
     await _createAdvancedSchema(db);
+    await _createLearningSchema(db);
   }
 
 
