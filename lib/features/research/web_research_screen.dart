@@ -186,7 +186,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   int _candidateScore(WebResearchResult result, String topic, String query) {
     final terms = '$topic $query'
         .toLowerCase()
-        .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
         .where((word) => word.length > 2)
         .toSet();
     final title = result.title.toLowerCase();
