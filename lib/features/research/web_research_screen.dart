@@ -7,6 +7,7 @@ import '../../ai/research/web_research_service.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../../data/repositories/memory_repository.dart';
 import '../../data/repositories/prompt_repository.dart';
+import '../../data/database/app_database.dart';
 import '../ai/model_manager_screen.dart';
 
 /// Autonomous, user-query-free learning session.
@@ -34,10 +35,33 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   final List<String> _log = [];
   bool _stopRequested = false;
 
+  Future<void> _restoreProgress() async {
+    final db = await AppDatabase.instance.database;
+    final state = await db.query('learning_state', where: 'id = 1', limit: 1);
+    final learned = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM learning_history')) ?? 0;
+    final prompts = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM prompts WHERE category LIKE 'Автообучение%'")) ?? 0;
+    final history = await db.query('learning_history', orderBy: 'created_at DESC', limit: 30);
+    if (!mounted) return;
+    setState(() {
+      _learned = learned;
+      _savedPrompts = prompts;
+      _cycles = state.isEmpty ? 0 : state.first['cycle_count'] as int;
+      _log..clear()..addAll(history.map((row) => 'Изучено: ${row['title']} · ${row['provider']}'));
+    });
+  }
+
+  Future<void> _persistCycle() async {
+    final db = await AppDatabase.instance.database;
+    await db.rawUpdate('UPDATE learning_state SET cycle_count = cycle_count + 1, updated_at = ? WHERE id = 1', [DateTime.now().toIso8601String()]);
+    final rows = await db.query('learning_state', where: 'id = 1', limit: 1);
+    if (mounted && rows.isNotEmpty) setState(() => _cycles = rows.first['cycle_count'] as int);
+  }
+
   @override
   void initState() {
     super.initState();
     _runtime.initialize();
+    _restoreProgress();
   }
 
   @override
@@ -81,7 +105,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     try {
       while (!_stopRequested && mounted && sessionCycles < 5) {
         sessionCycles++;
-        _cycles++;
+        await _persistCycle();
         await _learningCycle();
         if (_stopRequested || !mounted) break;
         if (mounted) {
