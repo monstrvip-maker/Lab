@@ -6,6 +6,7 @@ import '../memory/memory_screen.dart';
 import '../prompts/prompt_builder_screen.dart';
 import '../prompts/prompt_library_screen.dart';
 import '../research/web_research_screen.dart';
+import '../workspace/workspace_tools_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openMemory() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MemoryScreen()));
   void _openResearch() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WebResearchScreen()));
   void _openPrompts() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PromptLibraryScreen()));
+  void _openWorkspaceTools() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WorkspaceToolsScreen()));
   void _buildPrompt() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PromptBuilderScreen(initialText: _promptDraft.text)));
 
   @override
@@ -49,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _FeatureTile(icon: Icons.psychology, title: 'Самообучение и память AI', subtitle: 'Факты, предпочтения, правила и обратная связь', onTap: _openMemory),
       _FeatureTile(icon: Icons.hub_outlined, title: 'AI-агенты', subtitle: 'Роли, сценарии и задачи', onTap: _openAgents),
       _FeatureTile(icon: Icons.travel_explore_outlined, title: 'Центр исследований', subtitle: 'Поиск в интернете, изучение страниц локальной Qwen и сохранение знаний', onTap: _openResearch),
+      _FeatureTile(icon: Icons.backup_outlined, title: 'Импорт, экспорт и инструменты', subtitle: 'Резервные копии, перенос данных и импорт TXT/Markdown', onTap: _openWorkspaceTools),
     ],
   );
 }
