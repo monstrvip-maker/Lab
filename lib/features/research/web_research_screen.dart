@@ -35,28 +35,6 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     super.dispose();
   }
 
-  Future<void> _configureKey() async {
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Подключить веб-поиск'),
-      content: SizedBox(width: 520, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('Нужен ключ Brave Search API. Он хранится в защищённом хранилище Android и не записывается в GitHub. Запросы поиска отправляются сервису Brave.'),
-        const SizedBox(height: 12),
-        TextField(controller: controller, obscureText: true, decoration: const InputDecoration(labelText: 'Brave Search API key', hintText: 'Вставьте ключ')),
-      ])),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-        TextButton(onPressed: () async { await _service.saveApiKey(''); if (ctx.mounted) Navigator.pop(ctx, false); }, child: const Text('Удалить ключ')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Сохранить')),
-      ],
-    ));
-    if (ok == true) {
-      await _service.saveApiKey(controller.text);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ключ сохранён в защищённом хранилище.')));
-    }
-    controller.dispose();
-  }
-
   Future<void> _search() async {
     final query = _query.text.trim();
     if (query.isEmpty || _searching) return;
@@ -137,7 +115,7 @@ $pageText
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: const Text('Центр исследований'),
-      actions: [IconButton(tooltip: 'Настроить веб-поиск', onPressed: _configureKey, icon: const Icon(Icons.key))],
+      actions: const [],
     ),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(16), child: Column(children: [
@@ -158,11 +136,11 @@ $pageText
           label: Text(_searching ? 'Ищем в интернете…' : 'Найти материалы'),
         )),
         const SizedBox(height: 8),
-        Text('Найденные страницы можно прочитать, изучить локальной Qwen и сохранить выводы в память AI.', style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+        Text('Поиск DuckDuckGo не требует API-ключа. Найденные страницы можно прочитать, изучить локальной Qwen и сохранить выводы в память AI.', style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
       ])),
       if (_error != null) Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
       Expanded(child: _results.isEmpty
-        ? Center(child: Padding(padding: const EdgeInsets.all(28), child: Text(_searching ? 'Выполняется поиск…' : 'Введи тему исследования. Для поиска нужен ключ Brave Search API — его можно добавить через значок ключа.', textAlign: TextAlign.center)))
+        ? Center(child: Padding(padding: const EdgeInsets.all(28), child: Text(_searching ? 'Выполняется поиск…' : 'Введи тему исследования. Поиск DuckDuckGo работает без API-ключа; доступность зависит от ограничений поискового сервиса.', textAlign: TextAlign.center)))
         : ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             itemCount: _results.length,
