@@ -54,7 +54,9 @@ class WebResearchService {
           ? 'Поисковики не вернули результатов. Возможно, сработала антибот-защита.'
           : 'Не удалось получить выдачу. ${errors.join(' | ')}');
     }
-    return collected.values.take(18).toList();
+    final ranked = collected.values.toList()
+      ..sort((a, b) => _relevanceScore(b, q).compareTo(_relevanceScore(a, q)));
+    return ranked.take(18).toList();
   }
 
   Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine, {int candidateOffset = 0}) async {
@@ -116,7 +118,10 @@ class WebResearchService {
       final href = anchor.attributes['href'] ?? '';
       final heading = anchor.querySelector('h3');
       final title = switch (engine) {
-        SearchProvider.google => heading?.text.trim() ?? '',
+        SearchProvider.google => _firstNonEmpty([
+            heading?.text,
+            anchor.querySelector('.LC20lb, h2, h3')?.text,
+          ]),
         SearchProvider.yandex => _firstNonEmpty([
             anchor.querySelector('.OrganicTitle, .OrganicTitle-Link, h2, h3')?.text,
             anchor.attributes['aria-label'],
@@ -131,9 +136,12 @@ class WebResearchService {
       final url = _resolveUrl(href, engine, base: response.request?.url);
       if (title.length < 3 || url == null || !seen.add(url)) continue;
       final parent = anchor.parent?.parent ?? anchor.parent;
-      final snippet = parent?.querySelector(
-        '.VwiC3b, .IsZvec, .result__snippet, .OrganicText, .TextContainer, .text-container, .result__body',
-      )?.text.trim() ?? '';
+      final snippet = _firstNonEmpty([
+        parent?.querySelector(
+          '.VwiC3b, .IsZvec, .result__snippet, .OrganicText, .TextContainer, .text-container, .result__body',
+        )?.text,
+        parent?.text,
+      ]);
       results.add(WebResearchResult(
         title: title.replaceAll(RegExp(r'\s+'), ' '),
         url: url,
@@ -148,6 +156,33 @@ class WebResearchService {
       throw StateError('Выдача пуста или поисковик показал CAPTCHA/антибот-проверку.');
     }
     return results.take(10).toList();
+  }
+
+  int _relevanceScore(WebResearchResult result, String query) {
+    final stopWords = <String>{
+      'для', 'или', 'как', 'что', 'это', 'the', 'and', 'for', 'with',
+      'best', 'guide', 'tutorial', 'documentation', 'пример', 'практика',
+    };
+    final terms = query.toLowerCase()
+        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
+        .where((word) => word.length > 2 && !stopWords.contains(word))
+        .toSet();
+    final title = result.title.toLowerCase();
+    final snippet = result.snippet.toLowerCase();
+    var score = 0;
+    for (final term in terms) {
+      if (title.contains(term)) score += 4;
+      if (snippet.contains(term)) score += 1;
+    }
+    final host = Uri.tryParse(result.url)?.host.toLowerCase() ?? '';
+    if (host.endsWith('.gov') || host.endsWith('.edu') ||
+        host.contains('arxiv.org') || host.contains('github.com') ||
+        host.contains('developer.android.com') || host.contains('docs.flutter.dev')) {
+      score += 2;
+    }
+    if (title.length < 8) score -= 3;
+    if (snippet.length < 35) score -= 1;
+    return score;
   }
 
   String _firstNonEmpty(List<String?> values) => values
