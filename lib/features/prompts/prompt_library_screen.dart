@@ -150,8 +150,8 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
 
   String _simpleDiff(String before, String after) {
     if (before == after) return 'Изменений нет.';
-    final oldLines = before.split('\\n');
-    final newLines = after.split('\\n');
+    final oldLines = before.split('\n');
+    final newLines = after.split('\n');
     final output = <String>[];
     for (final line in oldLines) {
       if (!newLines.contains(line)) output.add('− $line');
@@ -159,7 +159,7 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
     for (final line in newLines) {
       if (!oldLines.contains(line)) output.add('+ $line');
     }
-    return output.join('\\n');
+    return output.join('\n');
   }
 
   @override
