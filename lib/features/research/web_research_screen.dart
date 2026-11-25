@@ -287,6 +287,7 @@ $page
 
   void _stop() {
     _stopRequested = true;
+    unawaited(_runtime.stop());
     setState(() => _status = 'Останавливаю сессию после текущей операции…');
   }
 
