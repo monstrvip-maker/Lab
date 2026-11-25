@@ -28,28 +28,28 @@ class PromptTemplateQualityAnalyzer {
     }
 
     final hasRole = RegExp(
-      r'роль|ты\s*[-—:]|выступай\s+как|you are|act as|role:',
+      r'роль|ты\s*[-—:]|выступай\s+как|you are|act as|role|persona:',
       caseSensitive: false,
     ).hasMatch(lower);
     final hasGoal = RegExp(
-      r'цель|задач[аеиу]|сделай|создай|проанализируй|подготовь|разработай|objective|task:',
+      r'цель|задач[аеиу]|сделай|создай|проанализируй|подготовь|разработай|objective|task|your job|your goal:',
       caseSensitive: false,
     ).hasMatch(lower);
     final hasInput = RegExp(
-      r'входн[а-яё]*\s+данн|контекст|исходн[а-яё]*\s+данн|input:|context:',
+      r'входн[а-яё]*\s+данн|контекст|исходн[а-яё]*\s+данн|input|context|provided text|user request:',
       caseSensitive: false,
     ).hasMatch(lower);
     final hasPlaceholder = RegExp(r'\[[^\]]{2,}\]').hasMatch(text);
     final hasSteps = RegExp(
-      r'шаг|этап|алгоритм|последовательност|сначала|затем|инструкц|step\s+\d|first,|then',
+      r'шаг|этап|алгоритм|последовательност|сначала|затем|инструкц|step|first|then|analyze|identify|review|consider',
       caseSensitive: false,
     ).hasMatch(lower);
     final hasOutput = RegExp(
-      r'формат\s+(ответ|результат)|результат:|выведи|представь\s+результат|output:|response:',
+      r'формат\s+(ответ|результат)|результат|выведи|представь\s+результат|output|response|return|deliver|structure:',
       caseSensitive: false,
     ).hasMatch(lower);
     final hasConstraints = RegExp(
-      r'ограничен|не\s+выдум|если\s+неизвестно|проверяй|не\s+добавляй|constraints:',
+      r'ограничен|не\s+выдум|если\s+неизвестно|проверяй|не\s+добавляй|constraints|do not|must not|avoid|never invent',
       caseSensitive: false,
     ).hasMatch(lower);
     final hasCjk = RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
@@ -83,7 +83,7 @@ class PromptTemplateQualityAnalyzer {
         hasOutput && !hasCjk;
     return PromptTemplateQualityReport(
       score: score.clamp(0, 100).toInt(),
-      isUsable: structurallyComplete && score >= 65,
+      isUsable: structurallyComplete && score >= 50,
       strengths: strengths,
       issues: issues,
     );
