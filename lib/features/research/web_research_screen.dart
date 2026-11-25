@@ -173,7 +173,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final text = '${result.title} ${result.snippet} ${result.url}'.toLowerCase();
     return RegExp(
       r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
-      r'промт|промпт|шаблон[а-яё]*\\s+промпт?|готов[а-яё]*\\s+промпт?',
+      r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?',
       caseSensitive: false,
     ).hasMatch(text);
   }
@@ -184,7 +184,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     if (!_hasPromptEvidence(result)) return -100;
     final terms = '$topic $query'
         .toLowerCase()
-        .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
         .where((word) => word.length > 2)
         .toSet();
     final title = result.title.toLowerCase();
