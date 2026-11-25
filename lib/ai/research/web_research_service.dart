@@ -57,7 +57,7 @@ class WebResearchService {
     return collected.values.take(18).toList();
   }
 
-  Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine) async {
+  Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine, {int candidateOffset = 0}) async {
     late final List<Uri> candidates;
     switch (engine) {
       case SearchProvider.google:
@@ -81,7 +81,7 @@ class WebResearchService {
 
     http.Response? response;
     Object? lastError;
-    for (final uri in candidates) {
+    for (final uri in candidates.skip(candidateOffset)) {
       try {
         final attempt = await _client.get(uri, headers: {
           'User-Agent': _userAgent,
@@ -140,6 +140,9 @@ class WebResearchService {
         snippet: snippet,
         provider: _label(engine),
       ));
+    }
+    if (results.isEmpty && candidateOffset + 1 < candidates.length) {
+      return _searchOne(query, engine, candidateOffset: candidateOffset + 1);
     }
     if (results.isEmpty) {
       throw StateError('Выдача пуста или поисковик показал CAPTCHA/антибот-проверку.');
