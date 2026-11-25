@@ -82,7 +82,7 @@ class KnowledgeIndexRepository {
     if (terms.isEmpty) return [];
     final db = await AppDatabase.instance.database;
     final rows = await db.rawQuery('''
-      SELECT c.document_id, c.chunk_index, c.content, d.title, d.source_name
+      SELECT c.document_id, c.chunk_index, c.content, c.token_text, d.title, d.source_name
       FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id
     ''');
     if (rows.isEmpty) return [];
