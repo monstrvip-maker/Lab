@@ -122,37 +122,36 @@ class LocalAiRuntime extends ChangeNotifier {
       _isGenerating = true;
       _error = null;
       notifyListeners();
+      // Each call supplies its own complete system/user context. Clear the
+      // native KV cache so previous research generations cannot consume the
+      // 2048-token context and trigger "Failed to decode prompt" on later pages.
+      await controller.clearContext();
       try {
         yield* controller.generateChat(
           messages: messages,
-          template: 'chatml',
+          // Let llama.cpp select the GGUF's embedded chat template. Forcing
+          // ChatML breaks models whose metadata declares another template.
+          template: null,
           maxTokens: maxTokens,
           temperature: temperature,
         );
       } catch (error) {
         final details = error.toString();
-        // Qwen instruct GGUFs use ChatML. If the plugin's chat-template
-        // adapter fails, retry once with the equivalent raw prompt so the
-        // native tokenizer receives the actual model control tokens.
-        if (details.toLowerCase().contains('decode prompt') &&
-            (modelName?.toLowerCase().contains('qwen') ?? false)) {
-          final rawPrompt = messages.map((message) {
-            final role = message.role == 'system' || message.role == 'assistant'
-                ? message.role
-                : 'user';
-            return '<|im_start|>$role\n${message.content.trim()}<|im_end|>\n';
-          }).join() + '<|im_start|>assistant\n';
+        if (details.toLowerCase().contains('decode prompt')) {
+          // One clean retry is useful for transient native/KV-cache failures.
+          await controller.clearContext();
           try {
-            yield* controller.generate(
-              prompt: rawPrompt,
+            yield* controller.generateChat(
+              messages: messages,
+              template: null,
               maxTokens: maxTokens,
               temperature: temperature,
             );
-          } catch (fallbackError) {
+          } catch (retryError) {
             throw StateError(
-              'Не удалось обработать запрос ни через ChatML, ни через прямой '
-              'формат Qwen. Первичная ошибка: $details; повторная попытка: $fallbackError. '
-              'Проверьте, что выбрана именно Instruct GGUF-модель, а не Base.',
+              'Локальная модель не смогла обработать запрос даже после очистки '
+              'контекста. Проверьте целостность GGUF, соответствие Instruct-модели '
+              'и доступную память. Первая ошибка: $details; повтор: $retryError',
             );
           }
         } else {
