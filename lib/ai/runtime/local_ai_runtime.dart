@@ -24,6 +24,7 @@ class LocalAiRuntime extends ChangeNotifier {
   bool _isGenerating = false;
   dynamic _gpuInfo;
   Future<void> _generationTail = Future<void>.value();
+  Future<void>? _initializeFuture;
 
   String? get modelPath => _modelPath;
   String? get modelName => _modelPath == null ? null : path.basename(_modelPath!);
@@ -33,15 +34,27 @@ class LocalAiRuntime extends ChangeNotifier {
   bool get isGenerating => _isGenerating;
   dynamic get gpuInfo => _gpuInfo;
 
-  Future<void> initialize() async {
+  /// Restore the selected model and load it automatically after app restart.
+  /// Native model memory cannot survive Android process death, so it must be
+  /// re-created from the persistent GGUF file once per process.
+  Future<void> initialize() {
+    return _initializeFuture ??= _initializeOnce();
+  }
+
+  Future<void> _initializeOnce() async {
     final preferences = await SharedPreferences.getInstance();
     final savedPath = preferences.getString(_modelPathKey);
     if (savedPath != null && await File(savedPath).exists()) {
       _modelPath = savedPath;
     } else if (savedPath != null) {
       await preferences.remove(_modelPathKey);
+      _error = 'Сохранённый файл модели не найден. Выберите GGUF заново.';
     }
     notifyListeners();
+
+    if (_modelPath != null) {
+      await loadModel();
+    }
   }
 
   Future<void> importModel(String sourcePath) async {
