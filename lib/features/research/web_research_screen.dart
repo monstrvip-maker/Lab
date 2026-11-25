@@ -106,8 +106,17 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     try {
       while (!_stopRequested && mounted && sessionCycles < 5) {
         sessionCycles++;
-        await _persistCycle();
-        await _learningCycle();
+        try {
+          await _learningCycle();
+        } catch (cycleError) {
+          if (mounted) {
+            setState(() {
+              _status = 'Этот цикл не завершён. Подготовлю другую тему: $cycleError';
+              _log.insert(0, 'Цикл пропущен: $cycleError');
+              if (_log.length > 30) _log.removeLast();
+            });
+          }
+        }
         if (_stopRequested || !mounted) break;
         if (mounted) {
           setState(() => _status = 'Цикл $sessionCycles из 5 завершён. Подготавливаю следующую тему…');
@@ -153,12 +162,38 @@ ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
 ''', maxTokens: 140);
       final queryMatch = RegExp(r'ПОИСК\s*:\s*(.+)', caseSensitive: false).firstMatch(plan);
       final topicMatch = RegExp(r'ТЕМА\s*:\s*(.+)', caseSensitive: false).firstMatch(plan);
-      final query = queryMatch?.group(1)?.trim() ?? '';
-      final topic = topicMatch?.group(1)?.trim() ?? 'Новая тема для Prompt Lab';
-      if (query.length < 4) throw StateError('Qwen не смогла сформировать поисковый запрос: $plan');
+      var query = queryMatch?.group(1)?.trim() ?? '';
+      var topic = topicMatch?.group(1)?.trim() ?? '';
+      // Small/local models sometimes ignore the requested two-line format.
+      // Keep autonomous learning moving with a deterministic fallback.
+      const fallbackTopics = [
+        'Архитектура AI-агентов и разделение ролей',
+        'Оценка качества промтов и тестирование LLM',
+        'Локальные GGUF-модели и шаблоны чата',
+        'Безопасное извлечение знаний из веб-источников',
+        'Память AI и retrieval augmented generation',
+      ];
+      if (topic.isEmpty || topic.length > 120) {
+        topic = fallbackTopics[_cycles % fallbackTopics.length];
+      }
+      if (query.length < 4 || query.length > 220) {
+        query = '$topic best practices architecture guide';
+      }
 
       if (mounted) setState(() => _status = 'Ищу материалы по теме «$topic» в Google, Яндексе и DuckDuckGo…');
-      final results = await _service.search(query, provider: SearchProvider.all);
+      List<WebResearchResult> results = [];
+      Object? searchError;
+      for (final candidate in [query, '$topic documentation tutorial']) {
+        try {
+          results = await _service.search(candidate, provider: SearchProvider.all);
+          if (results.isNotEmpty) break;
+        } catch (error) {
+          searchError = error;
+        }
+      }
+      if (results.isEmpty) {
+        throw StateError('Поиск не вернул доступных материалов. $searchError');
+      }
       var studied = 0;
       for (final result in results.take(3)) {
         if (_stopRequested || !mounted) break;
@@ -234,8 +269,14 @@ $page
         }
       }
       if (studied == 0) {
-        throw StateError('Не удалось прочитать доступные страницы. Поисковики или сайты могли ограничить автоматический доступ.');
+        if (mounted) {
+          setState(() => _status =
+              'По теме «$topic» не удалось прочитать подходящие страницы. '
+              'Сайты могли ограничить доступ; следующий цикл попробует другую тему.');
+        }
+        return;
       }
+      await _persistCycle();
       if (mounted) setState(() => _status = 'Тема «$topic» изучена: обработано страниц — $studied.');
     } finally {
       _busy = false;
