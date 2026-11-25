@@ -344,9 +344,11 @@ $pageExcerpt
           var templateTitle = titleMatch?.group(1)?.trim() ?? '';
           var template = templateMatch?.group(1)?.trim() ?? '';
           if (template.isEmpty) {
-            final unlabelled = extracted.replaceAll(RegExp(r'^```[a-zA-Z]*\\s*|\\s*```          if (!_isUsefulPromptTemplate(template)) {
-            templateTitle = 'Исследование: $topic — практический промт';
-            if (mounted) setState(() => _log.insert(0, 'Отклонён источник без готового качественного промта: ${result.title}'));
+            final unlabelled = extracted.replaceAll('```', '').trim();
+            if (_isUsefulPromptTemplate(unlabelled)) template = unlabelled;
+          }
+          if (!_isUsefulPromptTemplate(template)) {
+            if (mounted) setState(() => _log.insert(0, 'Пропущено: Qwen не вернула пригодный шаблон промта'));
             continue;
           }
           if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
