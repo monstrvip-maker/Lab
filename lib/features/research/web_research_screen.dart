@@ -96,7 +96,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       _running = true;
       _stopRequested = false;
       _error = null;
-      _status = 'Qwen анализирует накопленные знания и выбирает первую тему…';
+      _status = 'Qwen выбирает категорию промтов для поиска…';
     });
 
     // Foreground session by design: Android may suspend background work.
@@ -231,20 +231,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   }
 
   String _buildFallbackPrompt(String topic, String summary, String sourceUrl) =>
-      'РОЛЬ: Ты — эксперт-практик по теме «$topic», работающий строго на основе входных данных.\n'
-      'ЦЕЛЬ: [Опиши измеримый результат, который требуется получить].\n'
-      'ВХОДНЫЕ ДАННЫЕ: [Контекст, материалы, аудитория, инструменты и ограничения].\n'
-      'ПРИНЦИПЫ ИЗ ИССЛЕДОВАНИЯ:\n$summary\n'
-      'АЛГОРИТМ РАБОТЫ:\n'
-      '1. Уточни цель и критерии успешного результата.\n'
-      '2. Проверь полноту входных данных; перечисли критические пробелы.\n'
-      '3. Разбей задачу на этапы и выполни их последовательно.\n'
-      '4. Для каждого существенного вывода укажи основание и допущения.\n'
-      '5. Проверь результат на ошибки, противоречия и соответствие критериям.\n'
-      'ОГРАНИЧЕНИЯ: Не выдумывай факты, ссылки, цифры и результаты проверок. Отделяй подтверждённое от предположений. Если данных недостаточно — задай уточняющий вопрос.\n'
-      'ФОРМАТ ОТВЕТА: [Структура результата, таблица/список при необходимости, выводы и следующие действия].\n'
-      'КРИТЕРИИ КАЧЕСТВА: Точность, проверяемость, практическая применимость, полнота, отсутствие повторов.\n'
-      'ИСТОЧНИК ДЛЯ СПРАВКИ: $sourceUrl';
+
 
   bool _isNearDuplicatePrompt(String candidate, String existing) {
     final a = _normalizeForDuplicateCheck(candidate).split(' ').where((word) => word.length > 3).toSet();
@@ -270,9 +257,9 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
           .map((row) => '- ${row['topic']}: ${row['title']}')
           .join('\n');
 
-      if (mounted) setState(() => _status = 'Qwen самостоятельно выбирает, что изучить дальше…');
+      if (mounted) setState(() => _status = 'Qwen выбирает, какие промты найти дальше…');
       final plan = await _generate('''
-Ты — автономный исследователь библиотеки промтов Prompt Lab AI. Ищи ИСКЛЮЧИТЕЛЬНО готовые промты, prompt templates, system prompts и prompt engineering patterns. Запрещено исследовать общие сведения, новости, статьи не о промтах, программирование, AI-агентов как отдельную тему, модели, технологии и любые другие темы. Каждый поиск должен быть направлен на нахождение качественных переиспользуемых промтов или методик их проектирования.
+Ты — автономный куратор библиотеки промтов. Твоя единственная задача — найти качественные готовые промты и шаблоны промтов. Не исследуй никакие другие темы. Не ищи новости, статьи общего характера, сведения о технологиях, модели, программирование или описания AI-агентов. Ищи только prompt templates, system prompts, prompt libraries и примеры готовых промтов.
 Сначала изучи, что уже есть, и не повторяй известные темы.
 Уже сохранённые промты:
 ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
@@ -292,20 +279,20 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
       // Small/local models sometimes ignore the requested two-line format.
       // Keep autonomous learning moving with a deterministic fallback.
       const fallbackTopics = [
-        'Архитектура AI-агентов и разделение ролей',
-        'Оценка качества промтов и тестирование LLM',
-        'Локальные GGUF-модели и шаблоны чата',
-        'Безопасное извлечение знаний из веб-источников',
-        'Память AI и retrieval augmented generation',
+        'Промты для разработки программного обеспечения',
+        'Промты для анализа и исследования документов',
+        'Промты для обучения и объяснения сложных тем',
+        'Промты для создания изображений и творческих задач',
+        'Промты для планирования и деловых задач',
       ];
       if (topic.isEmpty || topic.length > 120) {
         topic = fallbackTopics[_topicCursor % fallbackTopics.length];
       }
       if (query.length < 4 || query.length > 220) {
-        query = '$topic best practices architecture guide';
+        query = 'prompt template "$topic" examples reusable prompt';
       }
 
-      if (mounted) setState(() => _status = 'Ищу материалы по теме «$topic» в Google, Яндексе и DuckDuckGo…');
+      if (mounted) setState(() => _status = 'Ищу только промты по категории «$topic» в Google, Яндексе и DuckDuckGo…');
       final collectedResults = <String, WebResearchResult>{};
       final searchErrors = <String>[];
       final researchQueries = <String>{
@@ -433,7 +420,7 @@ $pageExcerpt
         return;
       }
       await _persistCycle();
-      if (mounted) setState(() => _status = 'Тема «$topic» изучена: обработано страниц — $studied.');
+      if (mounted) setState(() => _status = 'Категория «$topic»: найдено и обработано страниц с промтами — $studied.');
     } finally {
       _busy = false;
     }
