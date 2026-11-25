@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ai/model_manager_screen.dart';
+import '../diagnostics/diagnostics_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -32,9 +33,12 @@ class SettingsScreen extends StatelessWidget {
               leading: Icon(Icons.security_outlined),
               title: Text('Безопасность'),
             ),
-            const ListTile(
-              leading: Icon(Icons.monitor_heart_outlined),
-              title: Text('Диагностика'),
+            ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('Диагностика'),
+              subtitle: const Text('Проверка локальных компонентов'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const DiagnosticsScreen())),
             ),
             const ListTile(
               leading: Icon(Icons.info_outline),
