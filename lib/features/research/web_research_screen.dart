@@ -154,6 +154,15 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   bool _isUsefulPromptTemplate(String value) =>
       PromptTemplateQualityAnalyzer.analyze(value).isUsable;
 
+  bool _hasPromptEvidence(WebResearchResult result) {
+    final searchable = '\${result.title} \${result.snippet} \${result.url}'.toLowerCase();
+    return RegExp(
+      r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
+      r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?',
+      caseSensitive: false,
+    ).hasMatch(searchable);
+  }
+
   int _candidateScore(WebResearchResult result, String topic, String query) {
     // Reject generic articles, documentation and AI news before downloading
     // their pages. A source must explicitly look like a prompt resource.
