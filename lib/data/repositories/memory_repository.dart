@@ -101,6 +101,18 @@ class MemoryRepository {
     await db.delete('memory_items', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<String> feedbackContext({int limit = 4}) async {
+    final db = await _database.database;
+    final rows = await db.query('memory_feedback', orderBy: 'created_at DESC', limit: limit);
+    if (rows.isEmpty) return '';
+    return rows.map((row) {
+      final rating = (row['rating'] as int) > 0 ? 'ПОЛЕЗНО' : 'НЕПОЛЕЗНО';
+      final task = (row['task'] as String);
+      final note = (row['note'] as String?) ?? '';
+      return '- $rating: запрос «${task.length > 100 ? task.substring(0, 100) : task}»${note.isEmpty ? '' : '; комментарий: $note'}';
+    }).join('\\n');
+  }
+
   Future<void> rate({required String task, required String response, required int rating, String note = ''}) async {
     final db = await _database.database;
     await db.insert('memory_feedback', {
