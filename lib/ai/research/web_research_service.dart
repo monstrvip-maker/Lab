@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
@@ -15,66 +14,75 @@ class WebResearchResult {
   final String snippet;
 }
 
+/// API-key-free search using DuckDuckGo's public HTML/Lite endpoints.
+/// Search availability depends on the provider's anti-bot limits and network access.
 class WebResearchService {
-  WebResearchService({http.Client? client, FlutterSecureStorage? storage})
-      : _client = client ?? http.Client(),
-        _storage = storage ?? const FlutterSecureStorage();
+  WebResearchService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
-  final FlutterSecureStorage _storage;
-
-  static const _keyName = 'prompt_lab_brave_search_key';
-
-  Future<void> saveApiKey(String key) async {
-    final value = key.trim();
-    if (value.isEmpty) {
-      await _storage.delete(key: _keyName);
-    } else {
-      await _storage.write(key: _keyName, value: value);
-    }
-  }
-
-  Future<bool> hasApiKey() async {
-    final key = await _storage.read(key: _keyName);
-    return key != null && key.trim().isNotEmpty;
-  }
 
   Future<List<WebResearchResult>> search(String query) async {
-    final key = await _storage.read(key: _keyName);
-    if (key == null || key.trim().isEmpty) {
-      throw StateError('Сначала добавьте ключ Brave Search API в настройках приложения.');
+    final normalized = query.trim();
+    if (normalized.isEmpty) return const [];
+
+    Object? firstError;
+    for (final endpoint in [
+      Uri.https('html.duckduckgo.com', '/html/', {'q': normalized}),
+      Uri.https('lite.duckduckgo.com', '/lite/', {'q': normalized}),
+    ]) {
+      try {
+        final response = await _client.get(endpoint, headers: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'ru,en;q=0.8',
+        }).timeout(const Duration(seconds: 20));
+        if (response.statusCode != 200) {
+          firstError ??= 'HTTP ${response.statusCode}';
+          continue;
+        }
+        final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
+        final candidates = <WebResearchResult>[];
+
+        for (final anchor in document.querySelectorAll('a.result__a, a.result-link')) {
+          final title = anchor.text.trim();
+          final href = _resolveResultUrl(anchor.attributes['href'] ?? '');
+          if (title.isEmpty || href == null) continue;
+          final parent = anchor.parent?.parent;
+          final snippet = parent?.querySelector('.result__snippet, .result-snippet, td')?.text.trim() ?? '';
+          candidates.add(WebResearchResult(title: title, url: href, snippet: snippet));
+        }
+
+        final unique = <String, WebResearchResult>{};
+        for (final result in candidates) {
+          unique.putIfAbsent(result.url, () => result);
+        }
+        if (unique.isNotEmpty) return unique.values.take(8).toList();
+        firstError ??= 'Поисковая выдача не содержит результатов или сервис показал проверку робота.';
+      } catch (error) {
+        firstError ??= error;
+      }
     }
-    final uri = Uri.https('api.search.brave.com', '/res/v1/web/search', {
-      'q': query.trim(),
-      'count': '8',
-      'country': 'DE',
-      'search_lang': 'ru',
-      'safesearch': 'moderate',
-    });
-    final response = await _client.get(uri, headers: {
-      'Accept': 'application/json',
-      'X-Subscription-Token': key,
-    }).timeout(const Duration(seconds: 25));
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      throw StateError('Brave отклонил ключ. Проверьте API-ключ и доступный тариф.');
+    throw StateError(
+      'Не удалось получить выдачу DuckDuckGo. Сервис может временно ограничивать автоматические запросы. '
+      'Попробуйте позже или откройте сайт поиска в браузере. Подробности: $firstError',
+    );
+  }
+
+  String? _resolveResultUrl(String href) {
+    if (href.isEmpty) return null;
+    final uri = Uri.tryParse(href);
+    if (uri == null) return null;
+    if (uri.host.contains('duckduckgo.com')) {
+      final target = uri.queryParameters['uddg'];
+      if (target != null) {
+        final decoded = Uri.tryParse(target);
+        if (decoded != null && (decoded.scheme == 'https' || decoded.scheme == 'http')) {
+          return decoded.toString();
+        }
+      }
     }
-    if (response.statusCode == 429) {
-      throw StateError('Лимит поисковых запросов исчерпан. Попробуйте позже.');
-    }
-    if (response.statusCode != 200) {
-      throw StateError('Ошибка поиска: HTTP ${response.statusCode}.');
-    }
-    final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-    final web = data['web'] as Map<String, dynamic>?;
-    final rows = web?['results'] as List<dynamic>? ?? const [];
-    return rows.take(8).map((row) {
-      final item = row as Map<String, dynamic>;
-      return WebResearchResult(
-        title: (item['title'] ?? 'Без названия').toString(),
-        url: (item['url'] ?? '').toString(),
-        snippet: (item['description'] ?? '').toString(),
-      );
-    }).where((item) => item.url.startsWith('https://') || item.url.startsWith('http://')).toList();
+    if (uri.scheme == 'https' || uri.scheme == 'http') return uri.toString();
+    return null;
   }
 
   Future<String> readPage(String url) async {
@@ -83,7 +91,7 @@ class WebResearchService {
       throw const FormatException('Недопустимый адрес страницы.');
     }
     final response = await _client.get(uri, headers: {
-      'User-Agent': 'PromptLabAI/1.0 (educational research reader)',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/125.0 Mobile Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
     }).timeout(const Duration(seconds: 25));
     if (response.statusCode < 200 || response.statusCode >= 400) {
@@ -95,9 +103,7 @@ class WebResearchService {
     final document = html_parser.parse(raw);
     document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form,aside').forEach((e) => e.remove());
     final title = document.querySelector('title')?.text.trim() ?? '';
-    final main = document.querySelector('article') ??
-        document.querySelector('main') ??
-        document.body;
+    final main = document.querySelector('article') ?? document.querySelector('main') ?? document.body;
     final text = main?.text.replaceAll(RegExp(r'[ \\t]+'), ' ')
         .replaceAll(RegExp(r'\\n{3,}'), '\\n\\n').trim() ?? '';
     return _limit('${title.isEmpty ? '' : '$title\\n\\n'}$text');
@@ -105,8 +111,7 @@ class WebResearchService {
 
   String _limit(String value) {
     final text = value.trim();
-    if (text.length <= 4800) return text;
-    return text.substring(0, 4800);
+    return text.length <= 4800 ? text : text.substring(0, 4800);
   }
 
   void dispose() => _client.close();
