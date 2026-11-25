@@ -24,6 +24,6 @@ class PromptQualityAnalyzer {
     check(RegExp(r'роль|ты —|ты ').hasMatch(lower), 10, 'Определена роль исполнителя', 'Назначь модели подходящую роль');
     check(RegExp(r'этап|шаг|последовательно|сначала|затем').hasMatch(lower), 10, 'Описан порядок работы', 'Разбей сложную работу на последовательные этапы');
     check(!RegExp(r'сделай всё|как-нибудь|что-нибудь|сам разберись').hasMatch(lower), 5, 'Формулировка достаточно конкретна', 'Замени расплывчатые формулировки проверяемыми требованиями');
-    return PromptQualityReport(score: score.clamp(0, 100), strengths: strengths, missing: missing);
+    return PromptQualityReport(score: score.clamp(0, 100).toInt(), strengths: strengths, missing: missing);
   }
 }
