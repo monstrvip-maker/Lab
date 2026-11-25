@@ -135,7 +135,7 @@ class WebResearchService {
         '.VwiC3b, .IsZvec, .result__snippet, .OrganicText, .TextContainer, .text-container, .result__body',
       )?.text.trim() ?? '';
       results.add(WebResearchResult(
-        title: title.replaceAll(RegExp(r'\\s+'), ' '),
+        title: title.replaceAll(RegExp(r'\s+'), ' '),
         url: url,
         snippet: snippet,
         provider: _label(engine),
@@ -147,7 +147,11 @@ class WebResearchService {
     return results.take(10).toList();
   }
 
-  String _firstNonEmpty(List<String?> values) => values\n      .map((value) => value?.trim() ?? '')\n      .firstWhere((value) => value.isNotEmpty, orElse: () => '');\n\n  String? _resolveUrl(String href, SearchProvider engine) {
+  String _firstNonEmpty(List<String?> values) => values
+      .map((value) => value?.trim() ?? '')
+      .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+
+  String? _resolveUrl(String href, SearchProvider engine) {
     if (href.isEmpty) return null;
     final uri = Uri.tryParse(href);
     if (uri == null) return null;
