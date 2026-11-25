@@ -301,7 +301,15 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
         query,
       );
       if (results.isEmpty) {
-        throw StateError('Поиск нашёл страницы, но их заголовки и описания недостаточно соответствуют теме. Следующий цикл выберет другой запрос.');
+        // Retry with a broad prompt-only query; do not fail on a sparse SERP snippet.
+        final fallback = await _service.search(
+          'готовые промты prompt templates $topic examples',
+          provider: SearchProvider.all,
+        );
+        results.addAll(_rankCandidateResults(fallback, topic, 'prompt templates $topic'));
+      }
+      if (results.isEmpty) {
+        throw StateError('Поисковики не вернули пригодных ссылок даже после повторного запроса. Попробую следующую категорию.');
       }
       var studied = 0;
       for (final result in results) {
