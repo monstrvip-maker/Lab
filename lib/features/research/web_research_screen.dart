@@ -18,6 +18,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   final _memory = MemoryRepository();
   final _query = TextEditingController();
   List<WebResearchResult> _results = [];
+  SearchProvider _provider = SearchProvider.all;
   bool _searching = false;
   String? _error;
   String? _studyingUrl;
@@ -40,7 +41,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     if (query.isEmpty || _searching) return;
     setState(() { _searching = true; _error = null; _results = []; });
     try {
-      final results = await _service.search(query);
+      final results = await _service.search(query, provider: _provider);
       if (mounted) setState(() => _results = results);
       if (results.isEmpty && mounted) setState(() => _error = 'По этому запросу ничего не найдено. Попробуйте изменить формулировку.');
     } catch (e) {
@@ -119,6 +120,20 @@ $pageText
     ),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        DropdownButtonFormField<SearchProvider>(
+          value: _provider,
+          decoration: const InputDecoration(labelText: 'Поисковик', prefixIcon: Icon(Icons.search)),
+          items: const [
+            DropdownMenuItem(value: SearchProvider.all, child: Text('Все: Google + Яндекс + DuckDuckGo')),
+            DropdownMenuItem(value: SearchProvider.google, child: Text('Google')),
+            DropdownMenuItem(value: SearchProvider.yandex, child: Text('Яндекс')),
+            DropdownMenuItem(value: SearchProvider.duckDuckGo, child: Text('DuckDuckGo')),
+          ],
+          onChanged: _searching ? null : (value) {
+            if (value != null) setState(() => _provider = value);
+          },
+        ),
+        const SizedBox(height: 10),
         TextField(
           controller: _query,
           textInputAction: TextInputAction.search,
@@ -136,11 +151,11 @@ $pageText
           label: Text(_searching ? 'Ищем в интернете…' : 'Найти материалы'),
         )),
         const SizedBox(height: 8),
-        Text('Поиск DuckDuckGo не требует API-ключа. Найденные страницы можно прочитать, изучить локальной Qwen и сохранить выводы в память AI.', style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+        Text('Google, Яндекс и DuckDuckGo доступны без API-ключа. Можно выбрать один поисковик или искать сразу во всех.', style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
       ])),
       if (_error != null) Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
       Expanded(child: _results.isEmpty
-        ? Center(child: Padding(padding: const EdgeInsets.all(28), child: Text(_searching ? 'Выполняется поиск…' : 'Введи тему исследования. Поиск DuckDuckGo работает без API-ключа; доступность зависит от ограничений поискового сервиса.', textAlign: TextAlign.center)))
+        ? Center(child: Padding(padding: const EdgeInsets.all(28), child: Text(_searching ? 'Выполняется поиск…' : 'Введи тему исследования и выбери Google, Яндекс или DuckDuckGo. Можно искать сразу во всех; отдельные поисковики могут ограничивать автоматические запросы.', textAlign: TextAlign.center)))
         : ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             itemCount: _results.length,
@@ -150,6 +165,7 @@ $pageText
               final busy = _studyingUrl == result.url;
               return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(result.title, style: Theme.of(context).textTheme.titleMedium),
+                Text(result.provider, style: Theme.of(context).textTheme.labelSmall),
                 const SizedBox(height: 6),
                 Text(result.snippet),
                 const SizedBox(height: 6),
