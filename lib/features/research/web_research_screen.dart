@@ -183,7 +183,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
         title.trim().length < 4) return -100;
     final explicit = _hasPromptEvidence(result);
-    var score = explicit ? 10 : 0;
+    var score = explicit ? 10 : 2; // query itself is constrained to prompt assets
     for (final term in terms) {
       if (title.contains(term)) score += 5;
       if (snippet.contains(term)) score += 2;
