@@ -62,6 +62,82 @@ class PromptRepository {
   }
 
 
+  /// Saves a prompt discovered by research, atomically rejecting exact and
+  /// near-duplicates. Returns null when an equivalent prompt already exists.
+  Future<int?> createResearchPrompt({
+    required String title,
+    required String originalText,
+    required String category,
+    required String sourceUrl,
+    double duplicateThreshold = 0.88,
+  }) async {
+    final cleanTitle = title.trim().isEmpty ? 'Найденный промт' : title.trim();
+    final cleanText = originalText.trim();
+    if (cleanText.length < 100) {
+      throw ArgumentError('Слишком короткий шаблон для сохранения.');
+    }
+    final db = await _database.database;
+    final now = DateTime.now().toIso8601String();
+
+    return db.transaction((txn) async {
+      final existing = await txn.query(
+        'prompts',
+        columns: ['id', 'title', 'original_text', 'source_url'],
+      );
+      final candidate = _duplicateTokens(cleanText);
+      final normalized = _normalizePrompt(cleanText);
+      for (final row in existing) {
+        final oldText = (row['original_text'] as String? ?? '').trim();
+        final oldNormalized = _normalizePrompt(oldText);
+        final sameSourceAndTitle =
+            (row['source_url'] as String? ?? '') == sourceUrl &&
+            (row['title'] as String? ?? '').trim().toLowerCase() ==
+                cleanTitle.toLowerCase();
+        if (sameSourceAndTitle ||
+            (normalized.isNotEmpty && normalized == oldNormalized)) {
+          return null;
+        }
+        final oldTokens = _duplicateTokens(oldText);
+        if (candidate.isEmpty || oldTokens.isEmpty) continue;
+        final intersection = candidate.intersection(oldTokens).length;
+        final union = candidate.union(oldTokens).length;
+        if (union > 0 && intersection / union >= duplicateThreshold) {
+          return null;
+        }
+      }
+
+      final id = await txn.insert('prompts', {
+        'title': cleanTitle,
+        'original_text': cleanText,
+        'category': category,
+        'source_url': sourceUrl,
+        'project_id': null,
+        'is_favorite': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+      await txn.insert('prompt_versions', {
+        'prompt_id': id,
+        'version_number': 1,
+        'content': cleanText,
+        'note': 'Импортировано автоматическим исследованием',
+        'created_at': now,
+      });
+      return id;
+    });
+  }
+
+  String _normalizePrompt(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
+
+  Set<String> _duplicateTokens(String value) => _normalizePrompt(value)
+      .split(' ')
+      .where((token) => token.length > 3)
+      .toSet();
+
   Future<int> createWithImproved({
     required String title,
     required String originalText,
