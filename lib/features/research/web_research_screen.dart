@@ -150,18 +150,6 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       error.toString().toLowerCase().contains('failed to decode prompt') ||
       error.toString().toLowerCase().contains('decode prompt');
 
-  bool _isUsefulSummary(String value) {
-    final normalized = value.trim();
-    if (normalized.length < 140) return false;
-    final words = normalized
-        .toLowerCase()
-        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
-        .where((word) => word.length > 2)
-        .toSet();
-    return words.length >= 22 &&
-        !normalized.toUpperCase().contains('ИСТОЧНИК_НЕПОДХОДИТ');
-  }
-
   bool _isUsefulPromptTemplate(String value) {
     final text = value.trim().toLowerCase();
     if (text.length < 220) return false;
@@ -229,9 +217,6 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     }
     return selected;
   }
-
-  String _buildFallbackPrompt(String topic, String summary, String sourceUrl) =>
-
 
   bool _isNearDuplicatePrompt(String candidate, String existing) {
     final a = _normalizeForDuplicateCheck(candidate).split(' ').where((word) => word.length > 3).toSet();
