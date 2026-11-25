@@ -183,21 +183,29 @@ ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
       }
 
       if (mounted) setState(() => _status = 'Ищу материалы по теме «$topic» в Google, Яндексе и DuckDuckGo…');
-      List<WebResearchResult> results = [];
-      Object? searchError;
-      for (final candidate in [query, '$topic documentation tutorial']) {
+      final collectedResults = <String, WebResearchResult>{};
+      final searchErrors = <String>[];
+      final researchQueries = <String>{
+        query,
+        '$topic official documentation',
+        '$topic research examples best practices',
+      };
+      for (final candidate in researchQueries) {
         try {
-          results = await _service.search(candidate, provider: SearchProvider.all);
-          if (results.isNotEmpty) break;
+          final found = await _service.search(candidate, provider: SearchProvider.all);
+          for (final item in found) {
+            collectedResults.putIfAbsent(item.url, () => item);
+          }
         } catch (error) {
-          searchError = error;
+          searchErrors.add('$candidate: $error');
         }
       }
-      if (results.isEmpty) {
-        throw StateError('Поиск не вернул доступных материалов. $searchError');
+      if (collectedResults.isEmpty) {
+        throw StateError('Поиск не вернул доступных материалов. ${searchErrors.join(' | ')}');
       }
+      final results = collectedResults.values.toList();
       var studied = 0;
-      for (final result in results.take(3)) {
+      for (final result in results.take(8)) {
         if (_stopRequested || !mounted) break;
         try {
           final db = await AppDatabase.instance.database;
@@ -267,6 +275,7 @@ $page
               if (_log.length > 30) _log.removeLast();
             });
           }
+          if (studied >= 2) break;
         } catch (e) {
           if (mounted) setState(() => _log.insert(0, 'Пропущен источник ${result.url}: $e'));
         }
