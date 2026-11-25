@@ -193,11 +193,6 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     return score;
   }
 
-  bool _isPromptFocusedResult(WebResearchResult result) {
-    final text = '${result.title} ${result.snippet} ${result.url}'.toLowerCase();
-    return RegExp(r'prompt|prompts|prompting|шаблон[ыа]? промт|промт[ыа]?|промпт[ыа]?|system prompt|prompt library|prompt template').hasMatch(text);
-  }
-
   List<WebResearchResult> _rankCandidateResults(
     Iterable<WebResearchResult> candidates,
     String topic,
