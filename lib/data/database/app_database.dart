@@ -14,7 +14,7 @@ class AppDatabase {
     final dbPath = path.join(await getDatabasesPath(), 'prompt_lab_ai.db');
     final opened = await openDatabase(
       dbPath,
-      version: 5,
+      version: 6,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -63,6 +63,7 @@ class AppDatabase {
     await _createMemorySchema(db);
     await _createAdvancedSchema(db);
     await _createLearningSchema(db);
+    await _createEngineeringSchema(db);
   }
 
 
@@ -78,6 +79,9 @@ class AppDatabase {
     }
     if (oldVersion < 5) {
       await _createLearningSchema(db);
+    }
+    if (oldVersion < 6) {
+      await _createEngineeringSchema(db);
     }
   }
 
@@ -135,6 +139,53 @@ class AppDatabase {
       FOREIGN KEY(prompt_id) REFERENCES prompts(id) ON DELETE SET NULL
     )''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_learning_history_created ON learning_history(created_at DESC)');
+  }
+
+
+  Future<void> _createEngineeringSchema(Database db) async {
+    final promptColumns = await db.rawQuery('PRAGMA table_info(prompts)');
+    if (!promptColumns.any((column) => column['name'] == 'project_id')) {
+      await db.execute('ALTER TABLE prompts ADD COLUMN project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL');
+    }
+    await db.execute('''CREATE TABLE IF NOT EXISTS task_dependencies (
+      task_id INTEGER NOT NULL,
+      depends_on_task_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(task_id, depends_on_task_id),
+      CHECK(task_id != depends_on_task_id),
+      FOREIGN KEY(task_id) REFERENCES project_tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(depends_on_task_id) REFERENCES project_tasks(id) ON DELETE CASCADE
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS knowledge_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      source_name TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      checksum TEXT NOT NULL UNIQUE,
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      imported_at TEXT NOT NULL
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS knowledge_chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      document_id INTEGER NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      token_text TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(document_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document ON knowledge_chunks(document_id, chunk_index)');
+    await db.execute('''CREATE TABLE IF NOT EXISTS learning_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_learning_queue_status ON learning_queue(status, created_at)');
   }
 
   Future<void> _createWorkspaceSchema(Database db) async {
