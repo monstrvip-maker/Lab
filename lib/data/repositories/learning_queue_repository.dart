@@ -101,7 +101,7 @@ class LearningQueueRepository {
     await db.update('learning_queue', {
       'attempts': attempts,
       'status': attempts >= maxAttempts ? 'failed' : 'retry',
-      'last_error': error.toString().substring(0, error.toString().length.clamp(0, 1000)),
+      'last_error': error.toString().substring(0, error.toString().length.clamp(0, 1000).toInt()),
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     }, where: 'id = ?', whereArgs: [id]);
   }
