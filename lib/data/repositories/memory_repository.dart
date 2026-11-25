@@ -83,7 +83,7 @@ class MemoryRepository {
       }
       if (item.title.toLowerCase().contains(query.toLowerCase())) score += 5;
       if (item.category == 'Предпочтение') score += 0.7;
-      score *= item.confidence.clamp(0.1, 1.0);
+      score *= item.confidence.clamp(0.1, 1.0).toDouble();
       return (item: item, score: score);
     }).where((entry) => entry.score > 0)
       .toList()
