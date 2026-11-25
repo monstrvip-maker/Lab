@@ -23,14 +23,14 @@ class AgentOrchestrator {
   }
 
   Stream<String> run(String task) async* {
-    final originalTask = _compact(task, limit: 900);
+    final originalTask = _compact(task, limit: 520);
     final summaries = <String>[];
 
     for (final role in _roles) {
       yield '\n\n${role.name}\n';
       final previous = summaries.isEmpty
           ? 'Предыдущих результатов пока нет.'
-          : summaries.join('\n');
+          : summaries.map((item) => _compact(item, limit: 240)).join('\n');
       final prompt = '''
 Ты — ${role.name}, один из четырёх последовательных специалистов.
 ${role.instruction}
@@ -49,7 +49,7 @@ $previous
       try {
         await for (final token in runtime.generateChat(
           messages: [ChatMessage(role: 'user', content: prompt)],
-          maxTokens: 128,
+          maxTokens: 96,
           temperature: 0.3,
         )) {
           result.write(token);
@@ -65,7 +65,7 @@ $previous
         yield '\nЭтап ${role.name} не вернул текст. Последующие этапы остановлены.';
         return;
       }
-      summaries.add('${role.name}: ${_compact(output)}');
+      summaries.add('${role.name}: ${_compact(output, limit: 240)}');
     }
   }
 }
