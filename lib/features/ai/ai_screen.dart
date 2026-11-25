@@ -39,6 +39,49 @@ class _AiScreenState extends State<AiScreen> {
   }
 
 
+
+  Future<void> _copyConversation() async {
+    if (_lines.isEmpty) return;
+    final transcript = _lines
+        .map((line) => '${line.isUser ? 'Вы' : 'Qwen'}: ${line.text}')
+        .join('\n\n');
+    await Clipboard.setData(ClipboardData(text: transcript));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Диалог скопирован')),
+      );
+    }
+  }
+
+  Future<void> _clearConversation() async {
+    if (_generating || _lines.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Начать новый диалог?'),
+        content: const Text(
+          'Текущая переписка будет очищена с экрана. Сохранённая история задач агентов останется.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Очистить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(() {
+        _lines.clear();
+        _history.clear();
+      });
+    }
+  }
+
   Future<void> _openHistory() async {
     final records = await AgentRunHistory.load();
     if (!mounted) return;
@@ -85,6 +128,18 @@ class _AiScreenState extends State<AiScreen> {
                                   title: const Text('Результат задачи'),
                                   content: SingleChildScrollView(child: SelectableText(fullText)),
                                   actions: [
+
+            IconButton(
+              tooltip: 'Скопировать диалог',
+              onPressed: _lines.isEmpty ? null : _copyConversation,
+              icon: const Icon(Icons.copy_all_outlined),
+            ),
+            IconButton(
+              tooltip: 'Новый диалог',
+              onPressed: _generating || _lines.isEmpty ? null : _clearConversation,
+              icon: const Icon(Icons.add_comment_outlined),
+            ),
+
                                     TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Закрыть')),
                                     FilledButton.icon(
                                       onPressed: () {
