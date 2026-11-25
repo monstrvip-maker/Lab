@@ -33,6 +33,7 @@ class PromptRepository {
     required String originalText,
     String category = 'Без категории',
     String? sourceUrl,
+    int? projectId,
   }) async {
     final db = await _database.database;
     final now = DateTime.now().toIso8601String();
@@ -43,6 +44,7 @@ class PromptRepository {
         'original_text': originalText.trim(),
         'category': category,
         'source_url': sourceUrl,
+        'project_id': projectId,
         'is_favorite': 0,
         'created_at': now,
         'updated_at': now,
@@ -65,6 +67,7 @@ class PromptRepository {
     required String originalText,
     required String improvedText,
     String category = 'Создано AI',
+    int? projectId,
   }) async {
     final db = await _database.database;
     final now = DateTime.now().toIso8601String();
@@ -74,6 +77,7 @@ class PromptRepository {
         'original_text': originalText.trim(),
         'improved_text': improvedText.trim(),
         'category': category,
+        'project_id': projectId,
         'is_favorite': 0,
         'created_at': now,
         'updated_at': now,
@@ -94,6 +98,25 @@ class PromptRepository {
       });
       return id;
     });
+  }
+
+
+  Future<void> addVersion(int promptId, String content, {String note = 'Изменение'}) async {
+    final db = await _database.database;
+    await db.transaction((txn) async {
+      final rows = await txn.rawQuery('SELECT COALESCE(MAX(version_number), 0) AS latest FROM prompt_versions WHERE prompt_id = ?', [promptId]);
+      final next = (rows.first['latest'] as int? ?? 0) + 1;
+      await txn.insert('prompt_versions', {
+        'prompt_id': promptId, 'version_number': next, 'content': content,
+        'note': note, 'created_at': DateTime.now().toIso8601String(),
+      });
+      await txn.update('prompts', {'improved_text': content, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [promptId]);
+    });
+  }
+
+  Future<void> assignProject(int promptId, int? projectId) async {
+    final db = await _database.database;
+    await db.update('prompts', {'project_id': projectId, 'updated_at': DateTime.now().toIso8601String()}, where: 'id = ?', whereArgs: [promptId]);
   }
 
   Future<void> update(PromptRecord prompt) async {
