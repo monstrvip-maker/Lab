@@ -14,7 +14,7 @@ class AppDatabase {
     final dbPath = path.join(await getDatabasesPath(), 'prompt_lab_ai.db');
     final opened = await openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
       },
@@ -60,12 +60,16 @@ class AppDatabase {
       'CREATE INDEX idx_prompts_category ON prompts(category)',
     );
     await _createWorkspaceSchema(db);
+    await _createMemorySchema(db);
   }
 
 
   Future<void> _upgradeSchema(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createWorkspaceSchema(db);
+    }
+    if (oldVersion < 3) {
+      await _createMemorySchema(db);
     }
   }
 
@@ -108,6 +112,36 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_project_tasks_project ON project_tasks(project_id, status)');
     await db.execute('CREATE INDEX idx_knowledge_updated ON knowledge_notes(updated_at DESC)');
+  }
+
+
+  Future<void> _createMemorySchema(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS memory_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'Факт',
+        tags TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'Пользователь',
+        confidence REAL NOT NULL DEFAULT 1.0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS memory_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task TEXT NOT NULL,
+        response TEXT NOT NULL,
+        rating INTEGER NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_memory_active ON memory_items(is_active, updated_at DESC)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_memory_feedback_created ON memory_feedback(created_at DESC)');
   }
 
   Future<void> close() async {
