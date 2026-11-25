@@ -125,21 +125,39 @@ class LocalAiRuntime extends ChangeNotifier {
       try {
         yield* controller.generateChat(
           messages: messages,
-          // null lets llama_flutter_android detect the template from GGUF metadata.
-          template: null,
+          template: 'chatml',
           maxTokens: maxTokens,
           temperature: temperature,
         );
       } catch (error) {
         final details = error.toString();
-        if (details.toLowerCase().contains('decode prompt')) {
-          throw StateError(
-            'Нативный движок не смог разобрать входной prompt. '
-            'Проверьте, распознан ли шаблон чата из метаданных GGUF, целостность файла '
-            'и совместимость модели с llama.cpp. Подробности: $details',
-          );
+        // Qwen instruct GGUFs use ChatML. If the plugin's chat-template
+        // adapter fails, retry once with the equivalent raw prompt so the
+        // native tokenizer receives the actual model control tokens.
+        if (details.toLowerCase().contains('decode prompt') &&
+            (modelName?.toLowerCase().contains('qwen') ?? false)) {
+          final rawPrompt = messages.map((message) {
+            final role = message.role == 'system' || message.role == 'assistant'
+                ? message.role
+                : 'user';
+            return '<|im_start|>$role\\n${message.content.trim()}<|im_end|>\\n';
+          }).join() + '<|im_start|>assistant\\n';
+          try {
+            yield* controller.generate(
+              prompt: rawPrompt,
+              maxTokens: maxTokens,
+              temperature: temperature,
+            );
+          } catch (fallbackError) {
+            throw StateError(
+              'Не удалось обработать запрос ни через ChatML, ни через прямой '
+              'формат Qwen. Первичная ошибка: $details; повторная попытка: $fallbackError. '
+              'Проверьте, что выбрана именно Instruct GGUF-модель, а не Base.',
+            );
+          }
+        } else {
+          rethrow;
         }
-        rethrow;
       }
     } finally {
       _isGenerating = false;
