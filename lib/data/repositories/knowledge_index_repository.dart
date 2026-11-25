@@ -48,14 +48,14 @@ class KnowledgeIndexRepository {
     const overlap = 180;
     var offset = 0;
     while (offset < normalized.length) {
-      var end = (offset + chunkSize).clamp(0, normalized.length);
+      var end = (offset + chunkSize).clamp(0, normalized.length).toInt();
       if (end < normalized.length) {
         final boundary = normalized.lastIndexOf(RegExp(r'[\n.!? ]'), end);
         if (boundary > offset + 900) end = boundary;
       }
       chunks.add(normalized.substring(offset, end).trim());
       if (end >= normalized.length) break;
-      offset = (end - overlap).clamp(offset + 1, normalized.length);
+      offset = (end - overlap).clamp(offset + 1, normalized.length).toInt();
     }
     final now = DateTime.now().toIso8601String();
     return db.transaction((txn) async {
