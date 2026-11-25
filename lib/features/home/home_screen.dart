@@ -47,7 +47,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        const FilledButton.icon(
+        FilledButton.icon(
           onPressed: null,
           icon: Icon(Icons.auto_awesome),
           label: Text('Генератор подключим следующим этапом'),
