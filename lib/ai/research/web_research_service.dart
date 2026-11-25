@@ -128,7 +128,7 @@ class WebResearchService {
           ]),
         SearchProvider.all => '',
       };
-      final url = _resolveUrl(href, engine);
+      final url = _resolveUrl(href, engine, base: response.request?.url);
       if (title.length < 3 || url == null || !seen.add(url)) continue;
       final parent = anchor.parent?.parent ?? anchor.parent;
       final snippet = parent?.querySelector(
@@ -154,9 +154,10 @@ class WebResearchService {
       .map((value) => value?.trim() ?? '')
       .firstWhere((value) => value.isNotEmpty, orElse: () => '');
 
-  String? _resolveUrl(String href, SearchProvider engine) {
+  String? _resolveUrl(String href, SearchProvider engine, {Uri? base}) {
     if (href.isEmpty) return null;
-    final uri = Uri.tryParse(href);
+    var uri = Uri.tryParse(href);
+    if (uri != null && !uri.hasScheme && base != null) uri = base.resolveUri(uri);
     if (uri == null) return null;
     if (engine == SearchProvider.duckDuckGo && uri.host.contains('duckduckgo.com')) {
       final target = uri.queryParameters['uddg'];
@@ -170,15 +171,20 @@ class WebResearchService {
       final target = uri.queryParameters['url'];
       if (target != null) return _validHttp(target);
     }
-    return _validHttp(href);
+    return _validHttp(uri.toString());
   }
 
   String? _validHttp(String value) {
     final uri = Uri.tryParse(value);
     if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return null;
-    if (uri.host.contains('google.') || uri.host.contains('yandex.') ||
-        uri.host.contains('duckduckgo.com')) return null;
-    return uri.toString();
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty || host.contains('google.') || host.contains('yandex.') ||
+        host.contains('duckduckgo.com') || host.contains('facebook.com') ||
+        host.contains('instagram.com') || host.contains('tiktok.com') ||
+        host.contains('youtube.com') || host.contains('accounts.')) return null;
+    if (uri.path.toLowerCase().endsWith('.pdf') || uri.path.toLowerCase().endsWith('.jpg') ||
+        uri.path.toLowerCase().endsWith('.png') || uri.path.toLowerCase().endsWith('.zip')) return null;
+    return uri.replace(fragment: '').toString();
   }
 
   String _label(SearchProvider engine) => switch (engine) {
@@ -209,12 +215,14 @@ class WebResearchService {
     final main = document.querySelector('article') ?? document.querySelector('main') ?? document.body;
     final text = main?.text.replaceAll(RegExp(r'[ \\t]+'), ' ')
         .replaceAll(RegExp(r'\\n{3,}'), '\\n\\n').trim() ?? '';
+    if (text.length < 160) throw StateError('На странице недостаточно основного текста для исследования.');
     return _limit('${title.isEmpty ? '' : '$title\\n\\n'}$text');
   }
 
   String _limit(String value) {
     final text = value.trim();
-    return text.length <= 4800 ? text : text.substring(0, 4800);
+    // Keep the source excerpt small enough for a 2K-token mobile context.
+    return text.length <= 2200 ? text : text.substring(0, 2200);
   }
 
   void dispose() => _client.close();
