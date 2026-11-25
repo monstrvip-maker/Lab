@@ -23,6 +23,52 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
   void dispose() { _search.dispose(); super.dispose(); }
   void _reload() { _future = _repo.notes(search: _search.text); _indexFuture = _search.text.trim().length < 3 ? null : _index.search(_search.text); }
 
+
+  Future<void> _showDocuments() async {
+    final docs = await _index.documents();
+    final chunks = await _index.chunkCount();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+              Expanded(child: Text('Индекс документов · ${docs.length} файлов · $chunks фрагментов', style: Theme.of(sheetContext).textTheme.titleMedium)),
+              IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close)),
+            ])),
+            Expanded(child: docs.isEmpty
+              ? const Center(child: Text('Импортированных документов пока нет'))
+              : ListView.separated(itemCount: docs.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (ctx, i) {
+                  final doc = docs[i];
+                  return ListTile(
+                    leading: const Icon(Icons.description_outlined),
+                    title: Text(doc['title'] as String),
+                    subtitle: Text('${doc['source_name']} · ${doc['chunk_count']} фрагм.'),
+                    trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () async {
+                      final yes = await showDialog<bool>(context: ctx, builder: (dialog) => AlertDialog(
+                        title: const Text('Удалить документ из индекса?'),
+                        content: Text('«${doc['title']}» и все его фрагменты будут удалены.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('Отмена')),
+                          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Удалить')),
+                        ],
+                      ));
+                      if (yes == true) {
+                        await _index.deleteDocument(doc['id'] as int);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) _showDocuments();
+                      }
+                    }),
+                  );
+                })),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _importDocument() async {
     final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['txt', 'md'], withData: true);
     if (result == null || result.files.single.bytes == null) return;
@@ -64,7 +110,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('База знаний'), actions: [IconButton(tooltip: 'Импорт TXT/Markdown', onPressed: _importDocument, icon: const Icon(Icons.file_upload_outlined))]),
+    appBar: AppBar(title: const Text('База знаний'), actions: [IconButton(tooltip: 'Документы и индекс', onPressed: _showDocuments, icon: const Icon(Icons.folder_open_outlined)), IconButton(tooltip: 'Импорт TXT/Markdown', onPressed: _importDocument, icon: const Icon(Icons.file_upload_outlined))]),
     floatingActionButton: FloatingActionButton.extended(onPressed: () => _edit(), icon: const Icon(Icons.add), label: const Text('Заметка')),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(16), child: TextField(controller: _search, onChanged: (_) => setState(_reload), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Поиск по заметкам и тегам'))),
