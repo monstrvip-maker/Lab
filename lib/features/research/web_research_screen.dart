@@ -155,7 +155,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       PromptTemplateQualityAnalyzer.analyze(value).isUsable;
 
   bool _hasPromptEvidence(WebResearchResult result) {
-    final searchable = '\${result.title} \${result.snippet} \${result.url}'.toLowerCase();
+    final searchable = '${result.title} ${result.snippet} ${result.url}'.toLowerCase();
     return RegExp(
       r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
       r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?',
