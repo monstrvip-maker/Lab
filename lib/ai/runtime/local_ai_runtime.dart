@@ -125,7 +125,8 @@ class LocalAiRuntime extends ChangeNotifier {
       try {
         yield* controller.generateChat(
           messages: messages,
-          template: 'chatml',
+          // null lets llama_flutter_android detect the template from GGUF metadata.
+          template: null,
           maxTokens: maxTokens,
           temperature: temperature,
         );
@@ -134,8 +135,8 @@ class LocalAiRuntime extends ChangeNotifier {
         if (details.toLowerCase().contains('decode prompt')) {
           throw StateError(
             'Нативный движок не смог разобрать входной prompt. '
-            'Проверьте совместимость GGUF-модели с chat template (сейчас используется ChatML), '
-            'целостность файла и версию llama_flutter_android. Подробности: $details',
+            'Проверьте, распознан ли шаблон чата из метаданных GGUF, целостность файла '
+            'и совместимость модели с llama.cpp. Подробности: $details',
           );
         }
         rethrow;
