@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../ai/ai_screen.dart';
 import '../agents/agents_screen.dart';
+import '../knowledge/knowledge_screen.dart';
+import '../prompts/prompt_library_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -11,6 +13,10 @@ class HomeScreen extends StatelessWidget {
       MaterialPageRoute(builder: (_) => const AiScreen()),
     );
   }
+
+  void _openKnowledge(BuildContext context) { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const KnowledgeScreen())); }
+
+  void _openPrompts(BuildContext context) { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PromptLibraryScreen())); }
 
   void _openAgents(BuildContext context) {
     Navigator.of(context).push(
@@ -55,8 +61,8 @@ class HomeScreen extends StatelessWidget {
         const SizedBox(height: 24),
         Text('Рабочее пространство', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
-        const _FeatureTile(icon: Icons.library_books_outlined, title: 'Библиотека промтов', subtitle: 'Оригиналы, версии и анализ'),
-        const _FeatureTile(icon: Icons.psychology_alt_outlined, title: 'База знаний', subtitle: 'Методики и накопленный опыт'),
+        _FeatureTile(icon: Icons.library_books_outlined, title: 'Библиотека промтов', subtitle: 'Оригиналы, версии и анализ', onTap: () => _openPrompts(context)),
+        _FeatureTile(icon: Icons.psychology_alt_outlined, title: 'База знаний', subtitle: 'Локальные заметки, теги и поиск', onTap: () => _openKnowledge(context)),
         _FeatureTile(
           icon: Icons.hub_outlined,
           title: 'AI-агенты',
