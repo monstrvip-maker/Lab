@@ -189,38 +189,30 @@ $page
           final summaryMatch = RegExp(r'КОНСПЕКТ\s*:\s*([\s\S]*?)(?=ПРОМТ_НАЗВАНИЕ\s*:|$)', caseSensitive: false).firstMatch(extracted);
           final titleMatch = RegExp(r'ПРОМТ_НАЗВАНИЕ\s*:\s*([\s\S]*?)(?=ПРОМТ_ШАБЛОН\s*:|$)', caseSensitive: false).firstMatch(extracted);
           final templateMatch = RegExp(r'ПРОМТ_ШАБЛОН\s*:\s*([\s\S]*?)(?=ПРИМЕНЕНИЕ\s*:|$)', caseSensitive: false).firstMatch(extracted);
-          final summary = summaryMatch?.group(1)?.trim() ?? extracted;
-          final templateTitle = titleMatch?.group(1)?.trim() ?? '';
-          final template = templateMatch?.group(1)?.trim() ?? '';
-
-          await _memory.save(
-            title: '$topic — ${result.title}',
-            content: '$summary\n\nПрименение: ${extracted.split('ПРИМЕНЕНИЕ:').last.trim()}\n\nИсточник: ${result.url}',
-            category: 'Знание',
-            tags: 'автообучение, prompt engineering, $topic',
-            source: 'Автономное исследование: ${result.url}',
-          );
-          _learned++;
-          studied++;
-
-          if (template.length >= 100 &&
-              template.toUpperCase() != 'НЕТ' &&
-              templateTitle.isNotEmpty &&
-              templateTitle.toUpperCase() != 'НЕТ') {
-            final existing = await _prompts.getAll(search: templateTitle);
-            final duplicate = existing.any((p) =>
-                p.title.toLowerCase() == templateTitle.toLowerCase() ||
-                p.originalText.trim() == template);
-            if (!duplicate) {
-              await _prompts.create(
-                title: templateTitle,
-                originalText: template,
-                category: 'Автообучение · $topic',
-                sourceUrl: result.url,
-              );
-              _savedPrompts++;
-            }
+          final summary = summaryMatch?.group(1)?.trim().isNotEmpty == true ? summaryMatch!.group(1)!.trim() : extracted;
+          var templateTitle = titleMatch?.group(1)?.trim() ?? '';
+          var template = templateMatch?.group(1)?.trim() ?? '';
+          if (template.length < 100 || template.toUpperCase() == 'НЕТ') {
+            templateTitle = 'Исследование: $topic — практический промт';
+            template = 'Ты — эксперт по теме «$topic».\nЦЕЛЬ: [Желаемый результат].\nКОНТЕКСТ: [Исходные данные и условия].\nПОЛЕЗНЫЕ ПРИНЦИПЫ ИЗ ИСТОЧНИКА:\n$summary\nИСТОЧНИК: ${result.url}\nЗАДАНИЕ: Примени эти принципы к исходным данным. Не выдумывай факты, отделяй проверенное от предположений.\nФОРМАТ: [Структура результата].\nКРИТЕРИИ: Точность, практичность, полнота и отсутствие повторов.';
           }
+          if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
+          await _memory.save(title: '$topic — ${result.title}', content: '$summary\n\nИсточник: ${result.url}\nПоисковик: ${result.provider}', category: 'Знание', tags: 'автообучение, prompt engineering, $topic', source: 'Автономное исследование: ${result.url}');
+          final existing = await _prompts.getAll();
+          final duplicate = existing.any((p) => (p.sourceUrl == result.url && p.title.toLowerCase() == templateTitle.toLowerCase()) || p.originalText.trim() == template.trim());
+          int? promptId;
+          if (!duplicate && template.length >= 100) {
+            promptId = await _prompts.create(title: templateTitle, originalText: template, category: 'Автообучение · $topic', sourceUrl: result.url);
+          }
+          final db = await AppDatabase.instance.database;
+          await db.transaction((txn) async {
+            await txn.insert('learning_history', {'topic': topic, 'title': result.title, 'source_url': result.url, 'provider': result.provider, 'summary': summary, 'prompt_id': promptId, 'created_at': DateTime.now().toIso8601String()});
+            await txn.rawUpdate('UPDATE learning_state SET learned_count = learned_count + 1, saved_prompt_count = saved_prompt_count + ?, updated_at = ? WHERE id = 1', [promptId == null ? 0 : 1, DateTime.now().toIso8601String()]);
+          });
+          final learnedTotal = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM learning_history')) ?? _learned;
+          final promptTotal = Sqflite.firstIntValue(await db.rawQuery("SELECT COUNT(*) FROM prompts WHERE category LIKE 'Автообучение%'")) ?? _savedPrompts;
+          if (mounted) setState(() { _learned = learnedTotal; _savedPrompts = promptTotal; });
+          studied++;
           if (mounted) {
             setState(() {
               _log.insert(0, 'Изучено: ${result.title} · ${result.provider}');
