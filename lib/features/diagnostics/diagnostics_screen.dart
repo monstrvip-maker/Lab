@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
@@ -25,10 +24,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     } catch (e) { _databaseState = 'Ошибка SQLite: $e'; }
     try {
       final dir = await getApplicationSupportDirectory();
-      final free = await dir.stat();
-      _storageState = 'Папка приложения доступна: ${free.type.name}';
+      _storageState = await dir.exists() ? 'Папка приложения доступна' : 'Папка приложения не найдена';
     } catch (e) { _storageState = 'Ошибка хранилища: $e'; }
     await _runtime.initialize();
+    await _runtime.detectDevice();
     if (mounted) setState(() => _checking = false);
   }
 
