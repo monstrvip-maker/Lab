@@ -59,6 +59,43 @@ class PromptRepository {
     });
   }
 
+
+  Future<int> createWithImproved({
+    required String title,
+    required String originalText,
+    required String improvedText,
+    String category = 'Создано AI',
+  }) async {
+    final db = await _database.database;
+    final now = DateTime.now().toIso8601String();
+    return db.transaction((txn) async {
+      final id = await txn.insert('prompts', {
+        'title': title.trim().isEmpty ? 'Новый промт' : title.trim(),
+        'original_text': originalText.trim(),
+        'improved_text': improvedText.trim(),
+        'category': category,
+        'is_favorite': 0,
+        'created_at': now,
+        'updated_at': now,
+      });
+      await txn.insert('prompt_versions', {
+        'prompt_id': id,
+        'version_number': 1,
+        'content': originalText.trim(),
+        'note': 'Исходная задача',
+        'created_at': now,
+      });
+      await txn.insert('prompt_versions', {
+        'prompt_id': id,
+        'version_number': 2,
+        'content': improvedText.trim(),
+        'note': 'Версия, созданная локальной Qwen',
+        'created_at': now,
+      });
+      return id;
+    });
+  }
+
   Future<void> update(PromptRecord prompt) async {
     if (prompt.id == null) return;
     final db = await _database.database;
