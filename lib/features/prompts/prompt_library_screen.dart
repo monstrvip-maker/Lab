@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../../data/models/prompt_record.dart';
 import '../../data/repositories/prompt_repository.dart';
+import '../../data/repositories/advanced_repository.dart';
+import 'prompt_test_screen.dart';
 
 class PromptLibraryScreen extends StatefulWidget {
   const PromptLibraryScreen({super.key});
@@ -13,6 +15,7 @@ class PromptLibraryScreen extends StatefulWidget {
 
 class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
   final PromptRepository _repository = PromptRepository();
+  final AdvancedRepository _advanced = AdvancedRepository();
   final TextEditingController _searchController = TextEditingController();
   late Future<List<PromptRecord>> _promptsFuture;
   bool _favoritesOnly = false;
@@ -93,6 +96,48 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
     }
     titleController.dispose();
     bodyController.dispose();
+  }
+
+
+  Future<void> _showVersions(PromptRecord prompt) async {
+    final rows = await _advanced.promptVersions(prompt.id!);
+    if (!mounted) return;
+    final latest = rows.length > 1 ? rows[rows.length - 2] : (rows.isEmpty ? null : rows.last);
+    final current = rows.isEmpty ? null : rows.last;
+    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('История версий и сравнение'),
+      content: SizedBox(width: 560, child: SingleChildScrollView(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Сохранено версий: ${rows.length}'),
+          for (final row in rows) ListTile(
+            dense: true, title: Text('Версия ${row['version_number']}'),
+            subtitle: Text('${row['note'] ?? ''} · ${row['created_at']}'),
+          ),
+          if (latest != null && current != null) ...[
+            const Divider(),
+            const Text('Сравнение двух последних версий', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            SelectableText(_simpleDiff(latest['content'] as String, current['content'] as String)),
+          ],
+        ],
+      ))),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть'))],
+    ));
+  }
+
+  String _simpleDiff(String before, String after) {
+    if (before == after) return 'Изменений нет.';
+    final oldLines = before.split('\\n');
+    final newLines = after.split('\\n');
+    final output = <String>[];
+    for (final line in oldLines) {
+      if (!newLines.contains(line)) output.add('− $line');
+    }
+    for (final line in newLines) {
+      if (!oldLines.contains(line)) output.add('+ $line');
+    }
+    return output.join('\\n');
   }
 
   @override
@@ -209,6 +254,20 @@ class _PromptLibraryScreenState extends State<PromptLibraryScreen> {
                                   },
                                   child: const Text('Копировать Qwen'),
                                 ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => PromptTestScreen(prompt: prompt)));
+                                },
+                                child: const Text('Тестировать'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _showVersions(prompt);
+                                },
+                                child: const Text('Версии'),
+                              ),
                               TextButton(
                                 onPressed: () async {
                                   Navigator.pop(context);
