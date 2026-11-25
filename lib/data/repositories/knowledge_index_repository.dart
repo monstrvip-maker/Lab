@@ -118,6 +118,22 @@ class KnowledgeIndexRepository {
     return hits.take(limit).toList();
   }
 
+
+  Future<List<Map<String, Object?>>> documents() async {
+    final db = await AppDatabase.instance.database;
+    return db.query('knowledge_documents', orderBy: 'imported_at DESC');
+  }
+
+  Future<void> deleteDocument(int id) async {
+    final db = await AppDatabase.instance.database;
+    await db.delete('knowledge_documents', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> chunkCount() async {
+    final db = await AppDatabase.instance.database;
+    return Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM knowledge_chunks')) ?? 0;
+  }
+
   Future<int> documentCount() async {
     final db = await AppDatabase.instance.database;
     return Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM knowledge_documents')) ?? 0;
