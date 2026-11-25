@@ -390,21 +390,25 @@ $pageExcerpt
           }
           if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
           final templateIsUseful = _isUsefulPromptTemplate(template);
-          final existing = await _prompts.getAll();
-          final normalizedTemplate = _normalizeForDuplicateCheck(template);
-          final duplicate = existing.any((p) {
-            final saved = _normalizeForDuplicateCheck(p.originalText);
-            return (p.sourceUrl == result.url &&
-                    p.title.toLowerCase() == templateTitle.toLowerCase()) ||
-                (saved.isNotEmpty && (saved == normalizedTemplate || _isNearDuplicatePrompt(template, p.originalText)));
-          });
           int? promptId;
-          if (templateIsUseful && !duplicate) {
-            promptId = await _prompts.create(title: templateTitle, originalText: template, category: 'Автообучение · $topic', sourceUrl: result.url);
-            final savedRows = await _prompts.getAll(search: templateTitle);
-            final persisted = savedRows.any((item) => item.id == promptId && item.originalText.trim() == template.trim());
-            if (!persisted) throw StateError('Библиотека не подтвердила сохранение промта.');
-          } else if (!templateIsUseful && mounted) {
+          if (templateIsUseful) {
+            promptId = await _prompts.createResearchPrompt(
+              title: templateTitle,
+              originalText: template,
+              category: 'Автообучение · $topic',
+              sourceUrl: result.url,
+            );
+            if (promptId != null) {
+              final savedRows = await _prompts.getAll(search: templateTitle);
+              final persisted = savedRows.any((item) =>
+                  item.id == promptId && item.originalText.trim() == template.trim());
+              if (!persisted) {
+                throw StateError('Библиотека не подтвердила сохранение промта.');
+              }
+            } else if (mounted) {
+              setState(() => _log.insert(0, 'Дубликат пропущен: эквивалентный промт уже есть в библиотеке'));
+            }
+          } else if (mounted) {
             setState(() => _log.insert(0, 'Промт отклонён: не пройдена проверка качества'));
           }
           await db.transaction((txn) async {
