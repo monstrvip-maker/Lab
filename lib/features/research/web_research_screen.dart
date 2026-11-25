@@ -357,7 +357,7 @@ $pageExcerpt
 (полный переиспользуемый шаблон с понятными плейсхолдерами вроде [ЦЕЛЬ], [КОНТЕКСТ], [ОГРАНИЧЕНИЯ]; если источник не даёт оснований для полезного шаблона — напиши НЕТ)
 ПРИМЕНЕНИЕ:
 (когда и как применять)
-''', maxTokens: 300);
+''', maxTokens: 560);
           if (extracted.length < 180 || extracted.toUpperCase().contains('ИСТОЧНИК_НЕПОДХОДИТ')) continue;
 
           final titleMatch = RegExp(r'ПРОМТ_НАЗВАНИЕ\s*:\s*([\s\S]*?)(?=ПРОМТ_ШАБЛОН\s*:|$)', caseSensitive: false).firstMatch(extracted);
