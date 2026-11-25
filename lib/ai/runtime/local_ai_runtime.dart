@@ -140,8 +140,8 @@ class LocalAiRuntime extends ChangeNotifier {
             final role = message.role == 'system' || message.role == 'assistant'
                 ? message.role
                 : 'user';
-            return '<|im_start|>$role\\n${message.content.trim()}<|im_end|>\\n';
-          }).join() + '<|im_start|>assistant\\n';
+            return '<|im_start|>$role\n${message.content.trim()}<|im_end|>\n';
+          }).join() + '<|im_start|>assistant\n';
           try {
             yield* controller.generate(
               prompt: rawPrompt,
