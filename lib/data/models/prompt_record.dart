@@ -7,6 +7,7 @@ class PromptRecord {
     this.category = 'Без категории',
     this.sourceUrl,
     this.analysisJson,
+    this.projectId,
     this.isFavorite = false,
     required this.createdAt,
     required this.updatedAt,
@@ -19,6 +20,7 @@ class PromptRecord {
   final String category;
   final String? sourceUrl;
   final String? analysisJson;
+  final int? projectId;
   final bool isFavorite;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -32,6 +34,7 @@ class PromptRecord {
       category: map['category'] as String? ?? 'Без категории',
       sourceUrl: map['source_url'] as String?,
       analysisJson: map['analysis_json'] as String?,
+      projectId: map['project_id'] as int?,
       isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -45,6 +48,7 @@ class PromptRecord {
         'category': category,
         'source_url': sourceUrl,
         'analysis_json': analysisJson,
+        'project_id': projectId,
         'is_favorite': isFavorite ? 1 : 0,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
