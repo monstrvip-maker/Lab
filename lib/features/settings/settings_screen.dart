@@ -12,8 +12,10 @@ class SettingsScreen extends StatelessWidget {
     try {
       final folder = await BackupRepository().chooseBackupFolder();
       if (!context.mounted || folder == null) return;
+      final restored = await BackupRepository().restoreOrCreateFromFolder();
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Автосохранение включено. Копия создаётся при сворачивании приложения.')),
+        SnackBar(content: Text(restored > 0 ? 'Данные восстановлены: $restored записей. Автосохранение включено.' : 'Папка подключена. Создана первая резервная копия; далее данные будут сохраняться автоматически.')),
       );
     } catch (error) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось выбрать папку: $error')));
