@@ -52,18 +52,43 @@ class MemoryRepository {
     return rows.map(MemoryItem.fromMap).toList();
   }
 
+  List<String> _terms(String text) => text.toLowerCase()
+      .split(RegExp(r'[^\\p{L}\\p{N}]+', unicode: true))
+      .where((word) => word.length >= 3)
+      .toList();
+
   Future<List<MemoryItem>> relevant(String query, {int limit = 5}) async {
     final all = await list();
-    final terms = query.toLowerCase().split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
-      .where((w) => w.length >= 3).toSet();
+    final terms = _terms(query).toSet();
     if (terms.isEmpty) return all.where((m) => m.category == 'Предпочтение').take(limit).toList();
-    final scored = all.map((m) {
-      final haystack = '${m.title} ${m.content} ${m.tags}'.toLowerCase();
-      final score = terms.where(haystack.contains).length;
-      return (item: m, score: score);
-    }).where((x) => x.score > 0 || x.item.category == 'Предпочтение').toList()
+
+    final documentFrequency = <String, int>{};
+    for (final item in all) {
+      final words = _terms('${item.title} ${item.content} ${item.tags}').toSet();
+      for (final word in words) {
+        documentFrequency[word] = (documentFrequency[word] ?? 0) + 1;
+      }
+    }
+    final scored = all.map((item) {
+      final title = _terms(item.title);
+      final body = _terms(item.content);
+      final tags = _terms(item.tags);
+      var score = 0.0;
+      for (final term in terms) {
+        final tfTitle = title.where((word) => word == term).length;
+        final tfTags = tags.where((word) => word == term).length;
+        final tfBody = body.where((word) => word == term).length;
+        final idf = 1 + (all.length / (1 + (documentFrequency[term] ?? 0)));
+        score += (tfTitle * 3.0 + tfTags * 2.2 + tfBody) * idf;
+      }
+      if (item.title.toLowerCase().contains(query.toLowerCase())) score += 5;
+      if (item.category == 'Предпочтение') score += 0.7;
+      score *= item.confidence.clamp(0.1, 1.0);
+      return (item: item, score: score);
+    }).where((entry) => entry.score > 0)
+      .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
-    return scored.take(limit).map((x) => x.item).toList();
+    return scored.take(limit).map((entry) => entry.item).toList();
   }
 
   Future<int> save({
