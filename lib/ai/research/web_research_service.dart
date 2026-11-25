@@ -295,8 +295,8 @@ class WebResearchService {
         ? paragraphs.join('\n\n')
         : (main?.text ?? '');
     final text = bodyText
-        .replaceAll(RegExp(r'[ \\t]+'), ' ')
-        .replaceAll(RegExp(r'\\n{3,}'), '\\n\\n')
+        .replaceAll(RegExp(r'[ \t]+'), ' ')
+        .replaceAll(RegExp(r'\n{3,}'), '\\n\\n')
         .trim();
     return '${title.isEmpty ? '' : '$title\\n\\n'}$text';
   }
