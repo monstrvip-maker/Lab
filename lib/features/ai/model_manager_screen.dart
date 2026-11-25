@@ -19,7 +19,6 @@ class _ModelManagerScreenState extends State<ModelManagerScreen> {
   void initState() {
     super.initState();
     _runtime.initialize();
-    _runtime.detectDevice();
   }
 
   Future<void> _chooseModel() async {
@@ -168,8 +167,7 @@ class _ModelManagerScreenState extends State<ModelManagerScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Выберите заранее скачанный файл .gguf. Импорт создаёт копию во внутреннем хранилище приложения. '
-                'Модель не входит в APK и не загружается автоматически. Во время теста начнём с контекста 2048 токенов.',
+                'Выберите файл .gguf один раз. Приложение сохранит его во внутреннем хранилище и будет автоматически загружать модель при следующем запуске. Во время теста используется контекст 2048 токенов.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (_runtime.modelPath != null)
