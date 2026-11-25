@@ -10,13 +10,14 @@ class BackupRepository {
     'prompts', 'prompt_versions', 'projects', 'project_tasks',
     'knowledge_notes', 'memory_items', 'memory_feedback',
     'task_checkpoints', 'prompt_tests', 'knowledge_sources', 'agent_runs',
+    'learning_state', 'learning_history', 'task_dependencies', 'knowledge_documents', 'knowledge_chunks', 'learning_queue',
   ];
 
   Future<Uint8List> exportBytes() async {
     final db = await AppDatabase.instance.database;
     final payload = <String, Object?>{
       'format': 'prompt-lab-backup',
-      'schema': 4,
+      'schema': 6,
       'exportedAt': DateTime.now().toIso8601String(),
       'tables': <String, Object?>{},
     };
