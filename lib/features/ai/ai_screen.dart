@@ -5,6 +5,7 @@ import 'package:llama_flutter_android/llama_flutter_android.dart';
 import '../../ai/agents/agent_orchestrator.dart';
 import '../../ai/agents/agent_run_history.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
+import '../../data/repositories/memory_repository.dart';
 import '../prompts/prompt_library_screen.dart';
 import 'model_manager_screen.dart';
 
@@ -19,6 +20,8 @@ class AiScreen extends StatefulWidget {
 
 class _AiScreenState extends State<AiScreen> {
   final _runtime = LocalAiRuntime.instance;
+  final _memory = MemoryRepository();
+  String _lastTask = '';
   final _input = TextEditingController();
   final List<ChatMessage> _history = [];
   final List<_ChatLine> _lines = [];
@@ -190,10 +193,20 @@ class _AiScreenState extends State<AiScreen> {
 
     final response = StringBuffer();
     try {
+      final memories = await _memory.relevant(text, limit: 5);
+      final memoryContext = memories.isEmpty
+          ? ''
+          : 'Подтверждённая память пользователя (используй только если релевантно; не выдумывай):\n' +
+              memories.map((m) => '- [${m.category}] ${m.title}: ${m.content}').join('\n');
+      _lastTask = text;
       final stream = _agentMode
-          ? AgentOrchestrator(_runtime).run(text)
+          ? AgentOrchestrator(_runtime).run(memoryContext.isEmpty ? text : '$memoryContext\n\nЗадача: $text')
           : _runtime.generateChat(
-              messages: List<ChatMessage>.from(_history),
+              messages: [
+                if (memoryContext.isNotEmpty)
+                  ChatMessage(role: 'system', content: memoryContext),
+                ...List<ChatMessage>.from(_history),
+              ],
             );
       await for (final token in stream) {
         response.write(token);
@@ -215,6 +228,29 @@ class _AiScreenState extends State<AiScreen> {
     } finally {
       if (mounted) setState(() => _generating = false);
     }
+  }
+
+  Future<void> _saveLastAnswerToMemory(String answer) async {
+    if (answer.trim().isEmpty) return;
+    final title = _lastTask.length > 70 ? _lastTask.substring(0, 70) + '…' : _lastTask;
+    await _memory.save(
+      title: title.isEmpty ? 'Полезный ответ Qwen' : title,
+      content: answer,
+      category: 'Факт',
+      tags: 'ответ AI, подтверждение пользователя',
+      source: 'Сохранено пользователем из диалога',
+    );
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Ответ добавлен в память. Он будет учитываться в подходящих будущих запросах.')),
+    );
+  }
+
+  Future<void> _rateLastAnswer(String answer, int rating) async {
+    if (answer.trim().isEmpty) return;
+    await _memory.rate(task: _lastTask, response: answer, rating: rating);
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(rating > 0 ? 'Отзыв «Полезно» сохранён' : 'Отзыв «Не полезно» сохранён')),
+    );
   }
 
   Future<void> _stop() async {
@@ -428,8 +464,37 @@ class _AiScreenState extends State<AiScreen> {
                                   : Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: SelectableText(
-                              line.text.isEmpty && _generating ? '…' : line.text,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SelectableText(
+                                  line.text.isEmpty && _generating ? '…' : line.text,
+                                ),
+                                if (!line.isUser && index == _lines.length - 1 && !_generating && line.text.trim().isNotEmpty)
+                                  Wrap(
+                                    spacing: 2,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Полезный ответ',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => _rateLastAnswer(line.text, 1),
+                                        icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Не полезный ответ',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => _rateLastAnswer(line.text, -1),
+                                        icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Запомнить этот ответ',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => _saveLastAnswerToMemory(line.text),
+                                        icon: const Icon(Icons.bookmark_add_outlined, size: 19),
+                                      ),
+                                    ],
+                                  ),
+                              ],
                             ),
                           ),
                         );
