@@ -7,10 +7,11 @@ import '../database/app_database.dart';
 /// Portable JSON backup. Only app-owned tables are exported/imported.
 class BackupRepository {
   static const _tables = <String>[
-    'prompts', 'prompt_versions', 'projects', 'project_tasks',
+    'projects', 'project_tasks', 'prompts', 'prompt_versions',
     'knowledge_notes', 'memory_items', 'memory_feedback',
     'task_checkpoints', 'prompt_tests', 'knowledge_sources', 'agent_runs',
-    'learning_state', 'learning_history', 'task_dependencies', 'knowledge_documents', 'knowledge_chunks', 'learning_queue',
+    'learning_state', 'learning_history', 'task_dependencies',
+    'knowledge_documents', 'knowledge_chunks', 'learning_queue',
   ];
 
   Future<Uint8List> exportBytes() async {
