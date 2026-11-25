@@ -29,7 +29,6 @@ class BackupRepository {
     if (!await directory.exists()) await directory.create(recursive: true);
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_folderKey, selected);
-    await autoBackup();
     return selected;
   }
 
@@ -57,6 +56,23 @@ class BackupRepository {
       try { await old.delete(); } catch (_) {}
     }
     return file.path;
+  }
+
+  Future<int> restoreOrCreateFromFolder() async {
+    final folder = await configuredFolder();
+    if (folder == null || folder.isEmpty) {
+      throw StateError('Сначала выберите папку резервной копии в Documents.');
+    }
+    final directory = Directory(folder);
+    if (!await directory.exists()) throw StateError('Папка резервной копии недоступна.');
+    final backups = directory.listSync().whereType<File>()
+      .where((item) => path.basename(item.path).startsWith('prompt_lab_') && item.path.endsWith('.json')).toList()
+      ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    if (backups.isEmpty) {
+      await autoBackup();
+      return 0;
+    }
+    return importBackup(await backups.first.readAsBytes());
   }
 
   /// After reinstall, Android requires the user to grant the folder again.
