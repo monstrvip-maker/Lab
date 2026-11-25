@@ -35,6 +35,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   String? _error;
   final List<String> _log = [];
   bool _stopRequested = false;
+  int _topicCursor = 0;
 
   Future<void> _restoreProgress() async {
     final db = await AppDatabase.instance.database;
@@ -162,6 +163,7 @@ ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
 ''', maxTokens: 140);
       final queryMatch = RegExp(r'ПОИСК\s*:\s*(.+)', caseSensitive: false).firstMatch(plan);
       final topicMatch = RegExp(r'ТЕМА\s*:\s*(.+)', caseSensitive: false).firstMatch(plan);
+      _topicCursor++;
       var query = queryMatch?.group(1)?.trim() ?? '';
       var topic = topicMatch?.group(1)?.trim() ?? '';
       // Small/local models sometimes ignore the requested two-line format.
@@ -174,7 +176,7 @@ ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
         'Память AI и retrieval augmented generation',
       ];
       if (topic.isEmpty || topic.length > 120) {
-        topic = fallbackTopics[_cycles % fallbackTopics.length];
+        topic = fallbackTopics[_topicCursor % fallbackTopics.length];
       }
       if (query.length < 4 || query.length > 220) {
         query = '$topic best practices architecture guide';
