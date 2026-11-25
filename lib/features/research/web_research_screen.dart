@@ -372,8 +372,11 @@ $pageExcerpt
           int? promptId;
           if (templateIsUseful && !duplicate) {
             promptId = await _prompts.create(title: templateTitle, originalText: template, category: 'Автообучение · $topic', sourceUrl: result.url);
+            final savedRows = await _prompts.getAll(search: templateTitle);
+            final persisted = savedRows.any((item) => item.id == promptId && item.originalText.trim() == template.trim());
+            if (!persisted) throw StateError('Библиотека не подтвердила сохранение промта.');
           } else if (!templateIsUseful && mounted) {
-            setState(() => _log.insert(0, 'Конспект сохранён, но промт отклонён: не пройдена проверка структуры'));
+            setState(() => _log.insert(0, 'Промт отклонён: не пройдена проверка качества'));
           }
           await db.transaction((txn) async {
             await txn.insert('learning_history', {'topic': topic, 'title': result.title, 'source_url': result.url, 'provider': result.provider, 'summary': 'Промт: $templateTitle', 'prompt_id': promptId, 'created_at': DateTime.now().toIso8601String()});
@@ -465,7 +468,7 @@ $pageExcerpt
         )),
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _CounterCard(label: 'Знаний собрано', value: '$_learned')),
+          Expanded(child: _CounterCard(label: 'Источников обработано', value: '$_learned')),
           const SizedBox(width: 8),
           Expanded(child: _CounterCard(label: 'Промтов создано', value: '$_savedPrompts')),
           const SizedBox(width: 8),
