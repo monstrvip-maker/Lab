@@ -234,24 +234,71 @@ class WebResearchService {
     if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
       throw const FormatException('Недопустимый адрес страницы.');
     }
-    final response = await _client.get(uri, headers: {
-      'User-Agent': _userAgent,
-      'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
-    }).timeout(const Duration(seconds: 25));
-    if (response.statusCode < 200 || response.statusCode >= 400) {
-      throw StateError('Не удалось прочитать страницу: HTTP ${response.statusCode}.');
+
+    Object? directError;
+    try {
+      final response = await _client.get(uri, headers: {
+        'User-Agent': _userAgent,
+        'Accept': 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
+        'Accept-Language': 'ru,en;q=0.8',
+      }).timeout(const Duration(seconds: 18));
+      if (response.statusCode >= 200 && response.statusCode < 400) {
+        final extracted = _extractPageText(response);
+        if (extracted.length >= 160) return _limit(extracted);
+        directError = StateError('На странице недостаточно основного текста для исследования.');
+      } else {
+        directError = StateError('HTTP ${response.statusCode}');
+      }
+    } catch (error) {
+      directError = error;
     }
+
+    // Many public sites reject lightweight clients (403/429) or render the
+    // article client-side. Jina Reader is a public text-reader fallback; it
+    // does not bypass authentication or CAPTCHA and only reads public URLs.
+    try {
+      final readerUri = Uri.https('r.jina.ai', '/${uri.scheme}://${uri.authority}${uri.path}', uri.hasQuery ? uri.queryParameters : null);
+      final readerResponse = await _client.get(readerUri, headers: {
+        'User-Agent': 'PromptLabAI/1.0 (public-page text extraction)',
+        'Accept': 'text/plain',
+      }).timeout(const Duration(seconds: 25));
+      if (readerResponse.statusCode >= 200 && readerResponse.statusCode < 300) {
+        final text = utf8.decode(readerResponse.bodyBytes, allowMalformed: true).trim();
+        if (text.length >= 160) return _limit(text);
+        throw StateError('Reader вернул слишком короткий текст.');
+      }
+      throw StateError('Reader HTTP ${readerResponse.statusCode}');
+    } catch (readerError) {
+      throw StateError(
+        'Не удалось прочитать публичную страницу. Прямой запрос: $directError; '
+        'текстовый reader: $readerError',
+      );
+    }
+  }
+
+  String _extractPageText(http.Response response) {
     final type = response.headers['content-type'] ?? '';
     final raw = utf8.decode(response.bodyBytes, allowMalformed: true);
-    if (type.contains('text/plain')) return _limit(raw);
+    if (type.contains('text/plain') || !type.contains('html')) return raw.trim();
     final document = html_parser.parse(raw);
-    document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form,aside').forEach((e) => e.remove());
+    document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form,aside,iframe').forEach((e) => e.remove());
     final title = document.querySelector('title')?.text.trim() ?? '';
-    final main = document.querySelector('article') ?? document.querySelector('main') ?? document.body;
-    final text = main?.text.replaceAll(RegExp(r'[ \t]+'), ' ')
-        .replaceAll(RegExp(r'\n{3,}'), '\n\n').trim() ?? '';
-    if (text.length < 160) throw StateError('На странице недостаточно основного текста для исследования.');
-    return _limit('${title.isEmpty ? '' : '$title\n\n'}$text');
+    final main = document.querySelector('article') ??
+        document.querySelector('main') ??
+        document.querySelector('[role=main]') ??
+        document.body;
+    final paragraphs = main?.querySelectorAll('p,li,h1,h2,h3,blockquote,pre')
+        .map((element) => element.text.trim())
+        .where((value) => value.length > 35)
+        .toList() ?? const <String>[];
+    final bodyText = paragraphs.isNotEmpty
+        ? paragraphs.join('\n\n')
+        : (main?.text ?? '');
+    final text = bodyText
+        .replaceAll(RegExp(r'[ \\t]+'), ' ')
+        .replaceAll(RegExp(r'\\n{3,}'), '\\n\\n')
+        .trim();
+    return '${title.isEmpty ? '' : '$title\\n\\n'}$text';
   }
 
   String _limit(String value) {
