@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
@@ -18,38 +17,98 @@ class _PromptBuilderScreenState extends State<PromptBuilderScreen> {
   late final TextEditingController _input;
   String _result = '';
   bool _working = false;
+  bool _saved = false;
   String? _error;
 
+  bool get _isLedProject => RegExp(
+    r'led.?лен|led.?strip|ws2812|esp32|адресн.*лент',
+    caseSensitive: false,
+  ).hasMatch(_input.text);
+
   @override
-  void initState() { super.initState(); _input = TextEditingController(text: widget.initialText); _runtime.initialize(); }
+  void initState() {
+    super.initState();
+    _input = TextEditingController(text: widget.initialText);
+    _runtime.initialize();
+  }
+
   @override
-  void dispose() { _input.dispose(); super.dispose(); }
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  String _buildInstruction(String task) {
+    final ledContext = _isLedProject
+        ? '''
+Проверенный контекст проекта, который нужно учитывать как исходные вводные:
+- Контроллер: ESP32-S2 Mini (WEMOS LOLIN S2 Mini).
+- Лента: WS2812B, 100 светодиодов.
+- Линия данных: GPIO16.
+- Приложение: Flutter, целевые платформы Android и Windows.
+- Направление прошивки: ESPHome; приложение должно обнаруживать ESPHome-устройства напрямую, без обязательного Home Assistant.
+- Для адресной ленты важно учитывать порядок цветов (в проекте нужен настраиваемый профиль RGB/GRB/BGR).
+Не подменяй эти вводные другими платами, количеством светодиодов, GPIO или средами разработки. Если пользовательская задача явно задаёт другие значения, приоритет у неё; конфликт вынеси в «Требует уточнения».
+'''
+        : '';
+
+    return '''
+Ты — старший системный аналитик и инженер по проектированию программных решений. Твоя задача — превратить запрос в конкретное техническое задание-промт, по которому другая AI-модель сможет выполнить работу без догадок.
+
+ИСХОДНЫЙ ЗАПРОС:
+$task
+
+$ledContext
+
+ПРАВИЛА:
+1. Не пересказывай запрос общими словами. Преврати его в конкретные проверяемые требования.
+2. Не выдумывай аппаратные параметры, библиотеки, протоколы, версии, функции и результаты тестов.
+3. Отделяй известные вводные от неизвестных. Неизвестное помечай как «не задано» и формулируй точный вопрос только если без ответа нельзя принять архитектурное решение.
+4. Не навязывай Arduino IDE, Home Assistant, облачные API или другую платформу, если она не следует из исходных данных.
+5. Если задача о разработке, обязательно включи архитектуру модулей и потоков данных, этапы реализации, критерии готовности, обработку ошибок и план проверок.
+6. Для аппаратных проектов проверь совместимость контроллера, периферии, питания, интерфейсов и ограничений платформы. Не объявляй проверку выполненной — составь план проверок.
+7. Убери дубли, пустые фразы и формальные разделы, которые не помогают решить задачу.
+
+ФОРМАТ ОТВЕТА:
+# Роль исполнителя
+# Цель и ожидаемый результат
+# Подтверждённые исходные данные
+# Функциональные требования
+# Архитектура и взаимодействие компонентов
+# Этапы реализации с результатами каждого этапа
+# Проверки, тест-кейсы и критерии приёмки
+# Риски и обработка ошибок
+# Неизвестные данные и вопросы (только действительно необходимые)
+
+Пиши по-русски, технически точно и достаточно подробно, но без повторов. Верни только готовый промт. Не добавляй вымышленные ответы на вопросы.
+''';
+  }
 
   Future<void> _buildPrompt() async {
-    if (_working || _input.text.trim().isEmpty) return;
+    final task = _input.text.trim();
+    if (_working || task.isEmpty) return;
     if (!_runtime.isLoaded) {
       setState(() => _error = 'Сначала загрузите локальную модель в AI Studio → Модели.');
       return;
     }
-    setState(() { _working = true; _result = ''; _error = null; });
-    final instruction = '''
-Ты — инженер по проектированию промтов. Преобразуй запрос пользователя в готовый качественный промт на русском языке.
-Сохрани исходную цель. Уточни роль модели, контекст, входные данные, ограничения, пошаговую задачу, формат результата и критерии качества.
-Не выдумывай факты и не добавляй неоговорённые требования. Если данных не хватает, перечисли короткие уточнения в конце, но сначала дай максимально полезную версию с явно отмеченными допущениями.
-Верни только готовый промт и при необходимости блок «Что уточнить».
-Запрос пользователя:
-${_input.text.trim()}
-''';
+    setState(() {
+      _working = true;
+      _result = '';
+      _error = null;
+      _saved = false;
+    });
     try {
       await for (final token in _runtime.generateChat(
-        messages: [ChatMessage(role: 'user', content: instruction)],
-        maxTokens: 700,
-        temperature: 0.35,
+        messages: [ChatMessage(role: 'user', content: _buildInstruction(task))],
+        maxTokens: 520,
+        temperature: 0.25,
       )) {
         if (!mounted) return;
         setState(() => _result += token);
       }
-      if (_result.trim().isEmpty) _error = 'Модель не вернула текст. Попробуйте сократить запрос.';
+      if (_result.trim().isEmpty) {
+        _error = 'Модель не вернула текст. Попробуйте уточнить или сократить задачу.';
+      }
     } catch (e) {
       _error = 'Ошибка генерации: $e';
     } finally {
@@ -58,36 +117,119 @@ ${_input.text.trim()}
   }
 
   Future<void> _save() async {
-    if (_result.trim().isEmpty) return;
-    await _repository.create(title: _input.text.trim().split('\n').first, originalText: _input.text.trim(), category: 'Создано AI',);
-    await _repository.create(title: 'Улучшенный промт · ${_input.text.trim().split('\n').first}', originalText: _result.trim(), category: 'Улучшено AI');
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Оригинал и улучшенная версия сохранены в библиотеке')));
+    if (_result.trim().isEmpty || _saved) return;
+    try {
+      await _repository.createWithImproved(
+        title: _input.text.trim().split('\n').first,
+        originalText: _input.text.trim(),
+        improvedText: _result.trim(),
+        category: _isLedProject ? 'Разработка · Умный дом' : 'Создано AI',
+      );
+      if (!mounted) return;
+      setState(() => _saved = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Промт и обе версии сохранены в одной записи библиотеки')),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Не удалось сохранить промт: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Конструктор промтов')),
-    body: ListView(padding: const EdgeInsets.all(16), children: [
-      Text('Исходная задача', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
-      TextField(controller: _input, minLines: 4, maxLines: 8, decoration: const InputDecoration(hintText: 'Опиши, что должна сделать AI-модель…')),
-      const SizedBox(height: 12),
-      FilledButton.icon(onPressed: _working ? null : _buildPrompt, icon: const Icon(Icons.auto_awesome), label: Text(_working ? 'Создаю промт…' : 'Создать с помощью Qwen')),
-      if (_working) const Padding(padding: EdgeInsets.only(top: 12), child: LinearProgressIndicator()),
-      if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-      if (_result.isNotEmpty) ...[
-        const SizedBox(height: 22),
-        Text('Готовый промт', style: Theme.of(context).textTheme.titleLarge),
+    body: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      children: [
+        Text('Исходная задача', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Card(child: Padding(padding: const EdgeInsets.all(14), child: SelectableText(_result))),
-        const SizedBox(height: 10),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton.icon(onPressed: () => Clipboard.setData(ClipboardData(text: _result)), icon: const Icon(Icons.copy), label: const Text('Копировать')),
-          FilledButton.icon(onPressed: _save, icon: const Icon(Icons.save_outlined), label: const Text('Сохранить обе версии')),
-        ]),
+        TextField(
+          controller: _input,
+          minLines: 4,
+          maxLines: 8,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            hintText: 'Опиши задачу, ограничения и ожидаемый результат…',
+            alignLabelWithHint: true,
+          ),
+        ),
+        if (_isLedProject) ...[
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.memory_outlined),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Распознан контекст LED-проекта: ESP32-S2 Mini, WS2812B · 100 LED, GPIO16, Flutter Android/Windows, ESPHome. Эти вводные будут переданы Qwen.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _working ? null : _buildPrompt,
+          icon: const Icon(Icons.auto_awesome),
+          label: Text(_working ? 'Создаю промт…' : 'Создать с помощью Qwen'),
+        ),
+        if (_working) ...[
+          const SizedBox(height: 12),
+          const LinearProgressIndicator(),
+          const SizedBox(height: 6),
+          Text('Qwen формирует техническое задание на телефоне…', style: Theme.of(context).textTheme.bodySmall),
+        ],
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        if (_result.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          Text('Готовый промт', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: SelectableText(_result),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: _result));
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Готовый промт скопирован')),
+                  );
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Копировать'),
+              ),
+              FilledButton.icon(
+                onPressed: _saved ? null : _save,
+                icon: Icon(_saved ? Icons.check : Icons.save_outlined),
+                label: Text(_saved ? 'Сохранено' : 'Сохранить промт и версии'),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 16),
+        Text(
+          'Генерация выполняется выбранной локальной GGUF-моделью. Интернет и внешние AI API не используются.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
       ],
-      const SizedBox(height: 16),
-      Text('Работает на выбранной локальной GGUF-модели. Внешние AI API не используются.', style: Theme.of(context).textTheme.bodySmall),
-    ]),
+    ),
   );
 }
