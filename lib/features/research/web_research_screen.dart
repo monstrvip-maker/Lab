@@ -5,6 +5,7 @@ import 'package:llama_flutter_android/llama_flutter_android.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../ai/research/web_research_service.dart';
+import '../../ai/prompts/prompt_template_quality_analyzer.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../../data/repositories/prompt_repository.dart';
 import '../../data/database/app_database.dart';
@@ -150,33 +151,8 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       error.toString().toLowerCase().contains('failed to decode prompt') ||
       error.toString().toLowerCase().contains('decode prompt');
 
-  bool _isUsefulPromptTemplate(String value) {
-    final text = value.trim().toLowerCase();
-    if (text.length < 150) return false;
-    final hasRole = text.contains('роль:') || text.contains('ты —') || text.contains('ты -') || text.contains('you are') || text.contains('act as');
-    final hasGoal = text.contains('цель:') || text.contains('задача:') || text.contains('сделай') || text.contains('создай') || text.contains('проанализируй') || text.contains('task:') || text.contains('objective:') || text.contains('create') || text.contains('analyze');
-    final hasInput = text.contains('вход') || text.contains('контекст:') || text.contains('данные:') || text.contains('[текст]') || text.contains('[тема]') || text.contains('input:') || text.contains('context:');
-    final hasProcess = text.contains('алгоритм') || text.contains('шаг') ||
-        text.contains('порядок работы') || text.contains('этап') || text.contains('instructions') || text.contains('step 1') || text.contains('first,') || text.contains('then');
-    final hasOutput = text.contains('формат') || text.contains('результат:') || text.contains('ответ:') || text.contains('выведи') || text.contains('output:') || text.contains('response:');
-    final hasPlaceholder = RegExp(r'\[[^\]]{2,}\]').hasMatch(value);
-    return (hasRole && hasGoal && (hasInput || hasPlaceholder) && (hasProcess || hasOutput)) || (hasGoal && hasInput && hasProcess && hasOutput && hasPlaceholder);
-  }
-
-  String _normalizeForDuplicateCheck(String value) => value
-      .toLowerCase()
-      .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
-      .trim()
-      .replaceAll(RegExp(r'\s+'), ' ');
-
-  bool _hasPromptEvidence(WebResearchResult result) {
-    final text = '${result.title} ${result.snippet} ${result.url}'.toLowerCase();
-    return RegExp(
-      r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
-      r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?',
-      caseSensitive: false,
-    ).hasMatch(text);
-  }
+  bool _isUsefulPromptTemplate(String value) =>
+      PromptTemplateQualityAnalyzer.analyze(value).isUsable;
 
   int _candidateScore(WebResearchResult result, String topic, String query) {
     // Reject generic articles, documentation and AI news before downloading
@@ -225,13 +201,6 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     return selected;
   }
 
-  bool _isNearDuplicatePrompt(String candidate, String existing) {
-    final a = _normalizeForDuplicateCheck(candidate).split(' ').where((word) => word.length > 3).toSet();
-    final b = _normalizeForDuplicateCheck(existing).split(' ').where((word) => word.length > 3).toSet();
-    if (a.isEmpty || b.isEmpty) return false;
-    final union = a.union(b).length;
-    return union > 0 && a.intersection(b).length / union >= 0.82;
-  }
 
   String _promptFocusedExcerpt(String page) {
     final lower = page.toLowerCase();
