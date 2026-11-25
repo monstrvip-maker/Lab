@@ -211,7 +211,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     for (final item in ranked) {
       final score = _candidateScore(item, topic, query);
       final host = Uri.tryParse(item.url)?.host.toLowerCase() ?? item.url;
-      if (score < 2 || !hosts.add(host) || !_isPromptFocusedResult(item)) continue;
+      if (score < -1 || !hosts.add(host)) continue;
       selected.add(item);
       if (selected.length >= 8) break;
     }
