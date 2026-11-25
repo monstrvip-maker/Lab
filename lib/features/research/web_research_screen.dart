@@ -281,9 +281,11 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
       final collectedResults = <String, WebResearchResult>{};
       final searchErrors = <String>[];
       final researchQueries = <String>{
-        'prompt templates $topic examples reusable prompts',
-        '"$topic" prompt library system prompt template',
-        'prompt engineering $topic prompt examples',
+        '"$topic" prompt templates examples reusable prompts',
+        '"$topic" готовые промты шаблоны примеры',
+        'prompt library $topic system prompt template',
+        'site:github.com prompts $topic prompt templates',
+        'ChatGPT prompt examples $topic',
       };
       for (final candidate in researchQueries) {
         try {
