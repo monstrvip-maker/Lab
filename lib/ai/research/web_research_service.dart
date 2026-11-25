@@ -58,25 +58,51 @@ class WebResearchService {
   }
 
   Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine) async {
-    late final Uri uri;
+    late final List<Uri> candidates;
     switch (engine) {
       case SearchProvider.google:
-        uri = Uri.https('www.google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru'});
+        candidates = [
+          Uri.https('www.google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru'}),
+          Uri.https('google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru'}),
+        ];
       case SearchProvider.yandex:
-        uri = Uri.https('yandex.com', '/search/', {'text': query, 'lang': 'ru'});
+        candidates = [
+          Uri.https('yandex.com', '/search/', {'text': query, 'lang': 'ru'}),
+          Uri.https('yandex.ru', '/search/', {'text': query, 'lr': '213'}),
+        ];
       case SearchProvider.duckDuckGo:
-        uri = Uri.https('html.duckduckgo.com', '/html/', {'q': query});
+        candidates = [
+          Uri.https('html.duckduckgo.com', '/html/', {'q': query}),
+          Uri.https('lite.duckduckgo.com', '/lite/', {'q': query}),
+        ];
       case SearchProvider.all:
         throw ArgumentError('Select a concrete search engine');
     }
 
-    final response = await _client.get(uri, headers: {
-      'User-Agent': _userAgent,
-      'Accept': 'text/html,application/xhtml+xml',
-      'Accept-Language': 'ru,en;q=0.8',
-    }).timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) {
-      throw StateError('HTTP ${response.statusCode}');
+    http.Response? response;
+    Object? lastError;
+    for (final uri in candidates) {
+      try {
+        final attempt = await _client.get(uri, headers: {
+          'User-Agent': _userAgent,
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'ru,en;q=0.8',
+        }).timeout(const Duration(seconds: 20));
+        if (attempt.statusCode == 200) {
+          response = attempt;
+          break;
+        }
+        lastError = StateError(
+          attempt.statusCode == 202 || attempt.statusCode == 403 || attempt.statusCode == 429
+              ? 'Поисковик временно ограничил автоматический поиск (HTTP ${attempt.statusCode}).'
+              : 'HTTP ${attempt.statusCode}',
+        );
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (response == null) {
+      throw StateError('${lastError ?? 'Поисковик не ответил'}. Попробуйте другой источник или откройте поисковик в браузере.');
     }
     final document = html_parser.parse(utf8.decode(response.bodyBytes, allowMalformed: true));
     document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form').forEach((e) => e.remove());
