@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
 
+import '../../ai/agents/agent_orchestrator.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../prompts/prompt_library_screen.dart';
 import 'model_manager_screen.dart';
@@ -18,6 +19,7 @@ class _AiScreenState extends State<AiScreen> {
   final List<ChatMessage> _history = [];
   final List<_ChatLine> _lines = [];
   bool _generating = false;
+  bool _agentMode = false;
 
   @override
   void initState() {
@@ -57,14 +59,21 @@ class _AiScreenState extends State<AiScreen> {
 
     final response = StringBuffer();
     try {
-      await for (final token in _runtime.generateChat(
-        messages: List<ChatMessage>.from(_history),
-      )) {
+      final stream = _agentMode
+          ? AgentOrchestrator(_runtime).run(text)
+          : _runtime.generateChat(
+              messages: List<ChatMessage>.from(_history),
+            );
+      await for (final token in stream) {
         response.write(token);
         if (!mounted) return;
         setState(() => _lines.last.text = response.toString());
       }
-      _history.add(ChatMessage(role: 'assistant', content: response.toString()));
+      if (!_agentMode) {
+        _history.add(
+          ChatMessage(role: 'assistant', content: response.toString()),
+        );
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _lines.last.text = 'Ошибка генерации: $error');
@@ -87,6 +96,16 @@ class _AiScreenState extends State<AiScreen> {
         appBar: AppBar(
           title: const Text('AI Studio'),
           actions: [
+            IconButton(
+              tooltip: _agentMode ? 'Выключить режим агентов' : 'Включить режим агентов',
+              onPressed: _generating
+                  ? null
+                  : () => setState(() => _agentMode = !_agentMode),
+              icon: Icon(
+                Icons.hub_outlined,
+                color: _agentMode ? Theme.of(context).colorScheme.primary : null,
+              ),
+            ),
             IconButton(
               tooltip: 'Менеджер моделей',
               onPressed: _openModels,
@@ -125,7 +144,9 @@ class _AiScreenState extends State<AiScreen> {
                     child: Text(
                       _runtime.isLoaded
                           ? 'Локально · ${_runtime.modelName}'
-                          : 'Локальная модель не загружена',
+                          : _runtime.modelPath != null
+                              ? 'Модель выбрана · требуется загрузка'
+                              : 'Локальная модель не выбрана',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -134,33 +155,68 @@ class _AiScreenState extends State<AiScreen> {
                 ],
               ),
             ),
+            if (_agentMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.hub_outlined, size: 17),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'Режим агентов: Планировщик → Архитектор → Эксперт → Критик',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: _lines.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(28),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.auto_awesome, size: 48),
-                            const SizedBox(height: 14),
-                            const Text(
-                              'Локальный AI-чат',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ? LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight - 40,
+                          ),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 420),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.auto_awesome, size: 48),
+                                  const SizedBox(height: 14),
+                                  const Text(
+                                    'Локальный AI-чат',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _runtime.isLoaded
+                                        ? 'Модель готова. Напишите сообщение — ответ будет сгенерирован прямо на телефоне.'
+                                        : _runtime.modelPath != null
+                                            ? 'Модель импортирована. Откройте менеджер моделей и нажмите «Загрузить».'
+                                            : 'Выберите модель Qwen в формате GGUF. После загрузки ответы будут генерироваться на телефоне.',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  if (!_runtime.isLoaded) ...[
+                                    const SizedBox(height: 16),
+                                    FilledButton.icon(
+                                      onPressed: _openModels,
+                                      icon: const Icon(Icons.memory),
+                                      label: const Text('Открыть менеджер моделей'),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Подключите модель Qwen в формате GGUF. После загрузки ответы будут генерироваться на телефоне.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton.icon(
-                              onPressed: _openModels,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Добавить модель'),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     )
