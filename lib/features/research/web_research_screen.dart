@@ -163,6 +163,12 @@ ${promptContext.isEmpty ? 'Пока нет.' : promptContext}
       for (final result in results.take(3)) {
         if (_stopRequested || !mounted) break;
         try {
+          final db = await AppDatabase.instance.database;
+          final previouslyStudied = await db.query('learning_history', columns: ['id'], where: 'source_url = ?', whereArgs: [result.url], limit: 1);
+          if (previouslyStudied.isNotEmpty) {
+            if (mounted) setState(() { _log.insert(0, 'Уже изучено ранее: ${result.title}'); if (_log.length > 30) _log.removeLast(); });
+            continue;
+          }
           if (mounted) setState(() => _status = 'Qwen изучает: ${result.title}');
           final page = await _service.readPage(result.url);
           if (page.trim().length < 180) continue;
@@ -198,7 +204,11 @@ $page
             template = 'Ты — эксперт по теме «$topic».\nЦЕЛЬ: [Желаемый результат].\nКОНТЕКСТ: [Исходные данные и условия].\nПОЛЕЗНЫЕ ПРИНЦИПЫ ИЗ ИСТОЧНИКА:\n$summary\nИСТОЧНИК: ${result.url}\nЗАДАНИЕ: Примени эти принципы к исходным данным. Не выдумывай факты, отделяй проверенное от предположений.\nФОРМАТ: [Структура результата].\nКРИТЕРИИ: Точность, практичность, полнота и отсутствие повторов.';
           }
           if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
-          await _memory.save(title: '$topic — ${result.title}', content: '$summary\n\nИсточник: ${result.url}\nПоисковик: ${result.provider}', category: 'Знание', tags: 'автообучение, prompt engineering, $topic', source: 'Автономное исследование: ${result.url}');
+          final existingMemory = await _memory.list(search: result.title);
+          final memoryAlreadySaved = existingMemory.any((item) => item.source.contains(result.url));
+          if (!memoryAlreadySaved) {
+            await _memory.save(title: '$topic — ${result.title}', content: '$summary\n\nИсточник: ${result.url}\nПоисковик: ${result.provider}', category: 'Знание', tags: 'автообучение, prompt engineering, $topic', source: 'Автономное исследование: ${result.url}');
+          }
           final existing = await _prompts.getAll();
           final duplicate = existing.any((p) => (p.sourceUrl == result.url && p.title.toLowerCase() == templateTitle.toLowerCase()) || p.originalText.trim() == template.trim());
           int? promptId;
