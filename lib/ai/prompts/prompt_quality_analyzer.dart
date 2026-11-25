@@ -56,9 +56,9 @@ class PromptQualityAnalyzer {
     final hasAcceptance = RegExp(
       r'критер|провер|тест|готов|при[её]мк|должно работать|ошибк',
     ).hasMatch(lower);
-    final hasContext = text.length >= 100 || text.split(RegExp(r'\\s+')).length >= 14;
+    final hasContext = text.length >= 100 || text.split(RegExp(r'\s+')).length >= 14;
     final hasConcreteDetail = RegExp(
-      r'\\d|\\b(api|ai|gguf|flutter|python|sqlite|qwen|esp32|ws2812)\\b',
+      r'\d|\b(api|ai|gguf|flutter|python|sqlite|qwen|esp32|ws2812)\b',
     ).hasMatch(lower);
 
     check(hasAction, 20, 'Понятно, какое действие требуется', 'Уточни, что именно нужно сделать');
