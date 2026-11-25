@@ -248,10 +248,10 @@ class WebResearchService {
     document.querySelectorAll('script,style,noscript,svg,nav,footer,header,form,aside').forEach((e) => e.remove());
     final title = document.querySelector('title')?.text.trim() ?? '';
     final main = document.querySelector('article') ?? document.querySelector('main') ?? document.body;
-    final text = main?.text.replaceAll(RegExp(r'[ \\t]+'), ' ')
-        .replaceAll(RegExp(r'\\n{3,}'), '\\n\\n').trim() ?? '';
+    final text = main?.text.replaceAll(RegExp(r'[ \t]+'), ' ')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n').trim() ?? '';
     if (text.length < 160) throw StateError('На странице недостаточно основного текста для исследования.');
-    return _limit('${title.isEmpty ? '' : '$title\\n\\n'}$text');
+    return _limit('${title.isEmpty ? '' : '$title\n\n'}$text');
   }
 
   String _limit(String value) {
