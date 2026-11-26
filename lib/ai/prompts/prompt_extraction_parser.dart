@@ -15,7 +15,17 @@ class PromptExtractionParser {
     var title = titleMatch?.group(1)?.trim() ?? '';
     var template = templateMatch?.group(1)?.trim() ?? '';
     if (template.isEmpty) {
-      template = cleaned.replaceAll(RegExp(r'^(?:вот\s+(?:готовый\s+)?промт|готовый\s+шаблон|here\s+is\s+(?:the\s+)?prompt)\s*:\s*', caseSensitive: false, multiLine: true), '').trim();
+      final looksLikePrompt = RegExp(
+        r'^(?:роль\s*:|ты\s*[-—:]|выступай\s+как|you are\b|act as\b|'
+        r'persona\s*:|system\s+prompt\b)',
+        caseSensitive: false,
+      ).hasMatch(cleaned);
+      if (!looksLikePrompt) {
+        return PromptExtractionResult(title: title, template: '');
+      }
+      template = cleaned
+          .replaceAll(RegExp(r'^(?:вот\s+(?:готовый\s+)?промт|готовый\s+шаблон|here\s+is\s+(?:the\s+)?prompt)\s*:\s*', caseSensitive: false, multiLine: true), '')
+          .trim();
     }
     template = template.replaceAll(RegExp(r'^\s*["“”]+|["“”]+\s*$'), '').trim();
     title = title.replaceAll(RegExp(r'^\s*["“”]+|["“”]+\s*$'), '').trim();
