@@ -181,7 +181,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final snippet = result.snippet.toLowerCase();
     final uri = Uri.tryParse(result.url);
     if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
-        title.trim().length < 4) return -100;
+        isSearchEngineSourceUrl(result.url) || title.trim().length < 4) return -100;
     final explicit = _hasPromptEvidence(result);
     var score = explicit ? 10 : 2; // query itself is constrained to prompt assets
     for (final term in terms) {
@@ -422,14 +422,16 @@ $pageExcerpt
       if (studied == 0) {
         if (mounted) {
           setState(() => _status =
-              'По теме «$topic» не удалось прочитать подходящие страницы. '
-              'Сайты могли ограничить доступ; следующий цикл попробует другую тему.');
+              'По теме «$topic» не удалось получить пригодный шаблон. '
+              'Недоступные страницы и поисковые адреса пропущены; следующий цикл попробует другие источники.');
         }
-        return;
+      } else if (mounted) {
+        setState(() => _status = 'Категория «$topic»: обработано страниц с промтами — $studied.');
       }
-      await _persistCycle();
-      if (mounted) setState(() => _status = 'Категория «$topic»: найдено и обработано страниц с промтами — $studied.');
     } finally {
+      // A cycle is an attempted research pass, including a pass where engines
+      // block requests or no source contains a reusable prompt.
+      await _persistCycle();
       _busy = false;
     }
   }
