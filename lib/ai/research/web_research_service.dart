@@ -136,7 +136,11 @@ class WebResearchService {
         SearchProvider.all => '',
       };
       final url = _resolveUrl(href, engine, base: response.request?.url);
-      if (title.length < 3 || url == null || !seen.add(url)) continue;
+      if (title.trim().length < 4 ||
+          title.trim().length > 180 ||
+          url == null ||
+          !seen.add(url) ||
+          isSearchEngineSourceUrl(url)) continue;
       final parent = anchor.parent?.parent ?? anchor.parent;
       final snippet = _firstNonEmpty([
         parent?.querySelector(
@@ -224,10 +228,11 @@ class WebResearchService {
   };
 
   Future<String> readPage(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
-      throw const FormatException('Недопустимый адрес страницы.');
+    final normalizedUrl = normalizeResearchSourceUrl(url);
+    if (normalizedUrl.isEmpty || isSearchEngineSourceUrl(normalizedUrl)) {
+      throw const FormatException('Адрес не является публичной страницей с материалом.');
     }
+    final uri = Uri.parse(normalizedUrl);
 
     Object? directError;
     try {
@@ -263,6 +268,12 @@ class WebResearchService {
       }
       throw StateError('Reader HTTP ${readerResponse.statusCode}');
     } catch (readerError) {
+      final readerMessage = readerError.toString();
+      if (readerMessage.contains('451')) {
+        throw StateError(
+          'Источник недоступен для чтения (HTTP 451). Не повторяю запрос к этому адресу; перехожу к следующему источнику.',
+        );
+      }
       throw StateError(
         'Не удалось прочитать публичную страницу. Прямой запрос: $directError; '
         'текстовый reader: $readerError',
@@ -310,7 +321,7 @@ class WebResearchService {
 String normalizeResearchSourceUrl(String value) {
   final uri = Uri.tryParse(value.trim());
   if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return '';
-  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '');
+  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
   const blockedHosts = {
     'google.com', 'google.ru', 'google.de', 'google.co.uk',
     'yandex.ru', 'yandex.com', 'ya.ru', 'yastatic.net',
@@ -330,4 +341,20 @@ String normalizeResearchSourceUrl(String value) {
         key.toLowerCase().startsWith('utm_') ||
         {'yclid', 'gclid', 'fbclid', 'ref', 'from'}.contains(key.toLowerCase()));
   return uri.replace(fragment: '', queryParameters: query.isEmpty ? null : query).toString();
+}
+
+
+/// Search engine result pages are not source documents and must never be
+/// passed to the page reader or counted as prompt sources.
+bool isSearchEngineSourceUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null) return true;
+  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
+  const blocked = [
+    'google.', 'yandex.', 'ya.ru', 'yastatic.', 'duckduckgo.',
+    'bing.com', 'search.yahoo.', 'ecosia.org',
+  ];
+  return host.isEmpty || blocked.any((domain) => host == domain || host.endsWith('.$domain')) ||
+      (host.contains('google.') && uri.path == '/url') ||
+      (host.contains('yandex.') && (uri.path == '/' || uri.path.startsWith('/search')));
 }
