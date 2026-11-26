@@ -141,8 +141,6 @@ class WebResearchService {
       final htmlUrl = item['html_url']?.toString() ?? '';
       final description = item['description']?.toString() ?? '';
       if (fullName.isEmpty || htmlUrl.isEmpty) continue;
-      final searchable = '$fullName $description'.toLowerCase();
-      if (!RegExp(r'prompt|prompts|шаблон|промт|промпт|awesome', caseSensitive: false).hasMatch(searchable)) continue;
       final parts = fullName.split('/');
       if (parts.length != 2) continue;
       final readmeUrl = Uri.https(
