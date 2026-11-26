@@ -410,7 +410,10 @@ $pageExcerpt
 ПРИМЕНЕНИЕ:
 (когда и как применять)
 ''', maxTokens: 560);
-          if (extracted.length < 180 || extracted.toUpperCase().contains('ИСТОЧНИК_НЕПОДХОДИТ')) continue;
+          if (extracted.length < 180 || extracted.toUpperCase().contains('ИСТОЧНИК_НЕПОДХОДИТ')) {
+            await _recordSkippedSource(result, topic, 'на странице не обнаружен готовый промт');
+            continue;
+          }
 
           final parsed = PromptExtractionParser.parse(extracted);
           var templateTitle = parsed.title;
