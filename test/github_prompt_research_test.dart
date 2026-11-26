@@ -53,6 +53,6 @@ void main() {
         throwsA(isA<StateError>()),
       );
       service.dispose();
-    });;
+    });
   });
 }
