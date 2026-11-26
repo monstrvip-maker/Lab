@@ -331,18 +331,15 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
         query = 'prompt template "$topic" examples reusable prompt';
       }
 
-      if (mounted) setState(() => _status = 'Ищу только промты по категории «$topic» в Google, Яндексе и DuckDuckGo…');
+      if (mounted) setState(() => _status = 'Ищу публичные репозитории с готовыми промтами по категории «$topic»…');
       final collectedResults = <String, WebResearchResult>{};
       final searchErrors = <String>[];
       // Use Qwen's actual query (previously it was only used for ranking),
       // while keeping every fallback explicitly constrained to prompt assets.
+      // One API request per cycle avoids burning anonymous GitHub API
+      // rate limits with many near-identical queries.
       final researchQueries = <String>{
-        '"$query" prompt template',
-        '"$topic" prompt templates examples reusable prompts',
-        '"$topic" готовые промты шаблоны примеры',
-        'prompt library $topic system prompt template',
-        'site:github.com prompts $topic prompt templates',
-        'ChatGPT prompt examples $topic',
+        '$query prompt templates',
       };
       for (final candidate in researchQueries) {
         try {
@@ -355,7 +352,10 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
         }
       }
       if (collectedResults.isEmpty) {
-        throw StateError('Поиск не вернул доступных материалов. ${searchErrors.join(' | ')}');
+        final reason = searchErrors.isEmpty
+            ? 'Публичный каталог не вернул подходящих репозиториев.'
+            : searchErrors.first.replaceAll(RegExp(r'\s+'), ' ');
+        throw StateError('Не удалось получить источники промтов: $reason');
       }
       final results = _rankCandidateResults(
         collectedResults.values,
@@ -364,11 +364,12 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
       );
       if (results.isEmpty) {
         // Retry with a broad prompt-only query; do not fail on a sparse SERP snippet.
-        final fallback = await _service.search(
-          'готовые промты prompt templates $topic examples',
-          provider: SearchProvider.all,
-        );
-        results.addAll(_rankCandidateResults(fallback, topic, 'prompt templates $topic'));
+        // No automatic retry here: a second anonymous API call in the
+        // same cycle may hit the provider rate limit. Next cycle rotates topic.
+        if (mounted) {
+          setState(() => _status =
+              'В каталоге не нашлось подходящих репозиториев. Следующий цикл выберет другую категорию.');
+        }
       }
       if (results.isEmpty) {
         throw StateError('Поисковики не вернули пригодных ссылок даже после повторного запроса. Попробую следующую категорию.');
