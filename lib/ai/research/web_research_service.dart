@@ -349,7 +349,7 @@ String normalizeResearchSourceUrl(String value) {
 bool isSearchEngineSourceUrl(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null) return true;
-  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '');
+  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
   final isGoogle = host.startsWith('google.') || host.contains('.google.');
   final isYandex = host == 'ya.ru' || host.endsWith('.ya.ru') ||
       host.startsWith('yandex.') || host.contains('.yandex.') ||
