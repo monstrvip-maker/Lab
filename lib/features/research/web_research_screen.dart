@@ -216,10 +216,8 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   }
 
   int _candidateScore(WebResearchResult result, String topic, String query) {
-    // Search requests are already prompt-only. Search snippets may be sparse,
-    // so absence of the word "prompt" in a snippet is not a reason to discard
-    // a URL. The page reader, Qwen extraction and quality analyzer are the
-    // strict gates before a prompt can be saved.
+    // Only repositories/datasets that explicitly identify themselves as
+    // prompt collections are candidates. General AI-agent projects are noise.
     final terms = '${topic} ${query}'
         .toLowerCase()
         .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
@@ -232,7 +230,8 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
         isSearchEngineSourceUrl(result.url) || title.trim().length < 4) return -100;
     final explicit = _hasPromptEvidence(result);
-    var score = explicit ? 10 : 2; // query itself is constrained to prompt assets
+    if (!explicit) return -100;
+    var score = 10;
     for (final term in terms) {
       if (title.contains(term)) score += 5;
       if (snippet.contains(term)) score += 2;
@@ -257,8 +256,14 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final selected = <WebResearchResult>[];
     for (final item in ranked) {
       final score = _candidateScore(item, topic, query);
-      final host = Uri.tryParse(item.url)?.host.toLowerCase() ?? item.url;
-      if (score < -1 || !hosts.add(host)) continue;
+      final uri = Uri.tryParse(item.url);
+      final path = uri?.pathSegments ?? const <String>[];
+      final sourceKey = uri?.host == 'raw.githubusercontent.com' && path.length >= 2
+          ? 'github:${path[0]}/${path[1]}'
+          : uri?.host == 'huggingface.co' && path.length >= 2
+              ? 'hf:${path[1]}'
+              : item.url;
+      if (score < 5 || !hosts.add(sourceKey)) continue;
       selected.add(item);
       if (selected.length >= 8) break;
     }
@@ -267,18 +272,38 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
 
 
   String _promptFocusedExcerpt(String page) {
-    final lower = page.toLowerCase();
-    final patterns = <RegExp>[
-      RegExp(r'prompt|prompts|system prompt|шаблон промт|промт|промпт', caseSensitive: false),
+    // Prefer an actual prompt block over a repository's introductory text.
+    final markers = <RegExp>[
+      RegExp(r'(?im)^\s*(?:system\s+prompt|prompt\s*[:=]|template\s*[:=]|you are\b|act as\b|role\s*:)'),
+      RegExp(r'(?im)^\s*(?:###?\s*)?(?:prompts?|prompt templates?|system prompts?)\b'),
     ];
     var position = -1;
-    for (final pattern in patterns) {
-      final match = pattern.firstMatch(lower);
+    for (final marker in markers) {
+      final match = marker.firstMatch(page);
       if (match != null && (position < 0 || match.start < position)) position = match.start;
     }
-    final start = position > 350 ? position - 350 : 0;
-    final end = start + 1750 < page.length ? start + 1750 : page.length;
+    if (position < 0) {
+      final fallback = RegExp(r'prompt|prompts|шаблон промт|промт|промпт', caseSensitive: false)
+          .firstMatch(page);
+      position = fallback?.start ?? 0;
+    }
+    final start = position > 120 ? position - 120 : 0;
+    final end = start + 1900 < page.length ? start + 1900 : page.length;
     return page.substring(start, end);
+  }
+
+  bool _matchesSourceText(String template, String source) {
+    final normalize = (String value) => value.toLowerCase()
+        .split(RegExp(r'[^a-z0-9а-яё]+', caseSensitive: false))
+        .where((word) => word.length > 3)
+        .toSet();
+    final extracted = normalize(template);
+    final sourceWords = normalize(source);
+    if (extracted.length < 12 || sourceWords.isEmpty) return false;
+    final matched = extracted.intersection(sourceWords).length;
+    // We require most meaningful words in the extracted template to exist
+    // in the source. This prevents Qwen from inventing a new prompt.
+    return matched / extracted.length >= 0.55;
   }
   Future<void> _learningCycle() async {
     _busy = true;
@@ -381,7 +406,13 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
           final db = await AppDatabase.instance.database;
           final previouslyStudied = await db.query('learning_history', columns: ['id'], where: 'source_url = ?', whereArgs: [result.url], limit: 1);
           if (previouslyStudied.isNotEmpty) {
-            if (mounted) setState(() { _log.insert(0, 'Уже изучено ранее: ${result.title}'); if (_log.length > 30) _log.removeLast(); });
+            final entry = 'Уже изучено ранее: ${result.title}';
+            if (mounted && !_log.contains(entry)) {
+              setState(() {
+                _log.insert(0, entry);
+                if (_log.length > 30) _log.removeLast();
+              });
+            }
             continue;
           }
           if (mounted) setState(() => _status = 'Qwen изучает: ${result.title}');
@@ -402,12 +433,12 @@ URL: ${result.url}
 Текст источника (фрагмент):
 $pageExcerpt
 
-Найди 1–3 действительно полезных шаблона промтов. Не пересказывай статью и не сохраняй знания о других темах. Не придумывай, будто найденный шаблон опубликован на странице: если создаёшь улучшенную версию на основе приёмов источника, явно пометь её как адаптированную. Если страница не содержит конкретных промтов или методик их построения, напиши ИСТОЧНИК_НЕПОДХОДИТ. Каждый промт должен быть на грамотном русском языке, без китайских символов, с ролью, целью, входными данными, алгоритмом, ограничениями и форматом результата.
+Извлеки только готовый промт, который буквально присутствует в исходном тексте. НЕ СОЗДАВАЙ, НЕ ДОПОЛНЯЙ, НЕ ПЕРЕПИСЫВАЙ И НЕ ПЕРЕВОДИ его. Сохрани оригинальный язык и формулировки. Не считай описания AI-агентов, статьи и инструкции промтами. Если готового текста промта нет, напиши ИСТОЧНИК_НЕПОДХОДИТ.
 Используй строго такую структуру:
 ПРОМТ_НАЗВАНИЕ:
 (короткое уникальное название промта или напиши НЕТ)
 ПРОМТ_ШАБЛОН:
-(полный переиспользуемый шаблон с понятными плейсхолдерами вроде [ЦЕЛЬ], [КОНТЕКСТ], [ОГРАНИЧЕНИЯ]; если источник не даёт оснований для полезного шаблона — напиши НЕТ)
+(дословный текст готового промта из источника; сохрани язык и все плейсхолдеры; не создавай новый текст)
 ПРИМЕНЕНИЕ:
 (когда и как применять)
 ''', maxTokens: 560);
@@ -419,11 +450,12 @@ $pageExcerpt
           final parsed = PromptExtractionParser.parse(extracted);
           var templateTitle = parsed.title;
           var template = parsed.template;
-          if (!_isUsefulPromptTemplate(template)) {
+          if (!_isUsefulPromptTemplate(template) ||
+              !_matchesSourceText(template, pageExcerpt)) {
             await _recordSkippedSource(
               result,
               topic,
-              'Qwen не извлекла пригодный шаблон промта',
+              'не найден дословный готовый промт в тексте источника',
             );
             continue;
           }
