@@ -212,16 +212,8 @@ class WebResearchService {
   }
 
   String? _validHttp(String value) {
-    final uri = Uri.tryParse(value);
-    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return null;
-    final host = uri.host.toLowerCase();
-    if (host.isEmpty || host.contains('google.') || host.contains('yandex.') ||
-        host.contains('duckduckgo.com') || host.contains('facebook.com') ||
-        host.contains('instagram.com') || host.contains('tiktok.com') ||
-        host.contains('youtube.com') || host.contains('accounts.')) return null;
-    if (uri.path.toLowerCase().endsWith('.pdf') || uri.path.toLowerCase().endsWith('.jpg') ||
-        uri.path.toLowerCase().endsWith('.png') || uri.path.toLowerCase().endsWith('.zip')) return null;
-    return uri.replace(fragment: '').toString();
+    final normalized = normalizeResearchSourceUrl(value);
+    return normalized.isEmpty ? null : normalized;
   }
 
   String _label(SearchProvider engine) => switch (engine) {
@@ -310,4 +302,32 @@ class WebResearchService {
   }
 
   void dispose() => _client.close();
+}
+
+
+/// Returns a canonical public content URL, excluding search engines,
+/// social networks, tracking redirects and non-page assets.
+String normalizeResearchSourceUrl(String value) {
+  final uri = Uri.tryParse(value.trim());
+  if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return '';
+  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '');
+  const blockedHosts = {
+    'google.com', 'google.ru', 'google.de', 'google.co.uk',
+    'yandex.ru', 'yandex.com', 'ya.ru', 'yastatic.net',
+    'duckduckgo.com', 'facebook.com', 'instagram.com',
+    'tiktok.com', 'youtube.com', 'm.youtube.com',
+  };
+  if (host.isEmpty ||
+      blockedHosts.any((blocked) => host == blocked || host.endsWith('.$blocked')) ||
+      host.startsWith('accounts.') ||
+      uri.path.toLowerCase().endsWith('.pdf') ||
+      uri.path.toLowerCase().endsWith('.jpg') ||
+      uri.path.toLowerCase().endsWith('.jpeg') ||
+      uri.path.toLowerCase().endsWith('.png') ||
+      uri.path.toLowerCase().endsWith('.zip')) return '';
+  final query = Map<String, String>.from(uri.queryParameters)
+    ..removeWhere((key, _) =>
+        key.toLowerCase().startsWith('utm_') ||
+        {'yclid', 'gclid', 'fbclid', 'ref', 'from'}.contains(key.toLowerCase()));
+  return uri.replace(fragment: '', queryParameters: query.isEmpty ? null : query).toString();
 }
