@@ -272,7 +272,23 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
 
 
   String _promptFocusedExcerpt(String page) {
-    // Prefer an actual prompt block over a repository's introductory text.
+    // Prefer actual reusable prompt code blocks over README introductions.
+    final codeBlocks = RegExp(r'```[^\n]*\n([\s\S]*?)```').allMatches(page);
+    String? bestBlock;
+    var bestScore = 0;
+    for (final match in codeBlocks) {
+      final block = match.group(1)?.trim() ?? '';
+      if (block.length < 120) continue;
+      var score = 0;
+      if (RegExp(r'\byou are\b|\bact as\b|\brole\s*:|system prompt', caseSensitive: false).hasMatch(block)) score += 4;
+      if (RegExp(r'\b(task|objective|instructions|output|constraints)\b', caseSensitive: false).hasMatch(block)) score += 2;
+      if (RegExp(r'\[[A-Z_ -]{3,}\]').hasMatch(block)) score += 2;
+      if (block.length >= 250) score++;
+      if (score > bestScore) { bestScore = score; bestBlock = block; }
+    }
+    if (bestBlock != null && bestScore >= 3) {
+      return bestBlock.length <= 2200 ? bestBlock : bestBlock.substring(0, 2200);
+    }
     final markers = <RegExp>[
       RegExp(r'^\s*(?:system\s+prompt|prompt\s*[:=]|template\s*[:=]|you are\b|act as\b|role\s*:)', multiLine: true, caseSensitive: false),
       RegExp(r'^\s*(?:###?\s*)?(?:prompts?|prompt templates?|system prompts?)\b', multiLine: true, caseSensitive: false),
@@ -283,15 +299,12 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       if (match != null && (position < 0 || match.start < position)) position = match.start;
     }
     if (position < 0) {
-      final fallback = RegExp(r'prompt|prompts|шаблон промт|промт|промпт', caseSensitive: false)
-          .firstMatch(page);
-      position = fallback?.start ?? 0;
+      position = RegExp(r'prompt|prompts|шаблон промт|промт|промпт', caseSensitive: false).firstMatch(page)?.start ?? 0;
     }
     final start = position > 120 ? position - 120 : 0;
-    final end = start + 1900 < page.length ? start + 1900 : page.length;
+    final end = start + 2200 < page.length ? start + 2200 : page.length;
     return page.substring(start, end);
   }
-
   bool _matchesSourceText(String template, String source) {
     final normalize = (String value) => value.toLowerCase()
         .split(RegExp(r'[^a-z0-9а-яё]+', caseSensitive: false))
