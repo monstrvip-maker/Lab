@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../../ai/research/web_research_service.dart';
 import '../../ai/prompts/prompt_template_quality_analyzer.dart';
+import '../../ai/prompts/prompt_extraction_parser.dart';
 import '../../ai/runtime/local_ai_runtime.dart';
 import '../../data/repositories/prompt_repository.dart';
 import '../../data/database/app_database.dart';
@@ -156,7 +157,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
 
   bool _hasPromptEvidence(WebResearchResult result) {
     final uri = Uri.tryParse(result.url);
-    final searchable = '\${result.title} \${result.snippet} \${uri?.path ?? ''}'.toLowerCase();
+    final searchable = '${result.title} ${result.snippet} ${uri?.path ?? ''}'.toLowerCase();
     return RegExp(
       r'prompt|prompts|system[-_ ]?prompt|prompt[-_ ]?(template|library|collection)|'
       r'промт|промпт|шаблон[а-яё]*\s+промпт?|готов[а-яё]*\s+промпт?|'
@@ -170,7 +171,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     // so absence of the word "prompt" in a snippet is not a reason to discard
     // a URL. The page reader, Qwen extraction and quality analyzer are the
     // strict gates before a prompt can be saved.
-    final terms = '\${topic} \${query}'
+    final terms = '${topic} ${query}'
         .toLowerCase()
         .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
         .where((word) => word.length > 2 &&
@@ -187,7 +188,7 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       if (title.contains(term)) score += 5;
       if (snippet.contains(term)) score += 2;
     }
-    if (RegExp(r'template|шаблон|library|библиотек|collection|коллекц|awesome|prompts', caseSensitive: false).hasMatch('\${title} \${snippet} \${path}')) {
+    if (RegExp(r'template|шаблон|library|библиотек|collection|коллекц|awesome|prompts', caseSensitive: false).hasMatch('$title $snippet')) {
       score += 5;
     }
     if (snippet.length < 25) score -= 1;
@@ -359,14 +360,9 @@ $pageExcerpt
 ''', maxTokens: 560);
           if (extracted.length < 180 || extracted.toUpperCase().contains('ИСТОЧНИК_НЕПОДХОДИТ')) continue;
 
-          final titleMatch = RegExp(r'ПРОМТ_НАЗВАНИЕ\s*:\s*([\s\S]*?)(?=ПРОМТ_ШАБЛОН\s*:|$)', caseSensitive: false).firstMatch(extracted);
-          final templateMatch = RegExp(r'ПРОМТ_ШАБЛОН\s*:\s*([\s\S]*?)(?=ПРИМЕНЕНИЕ\s*:|$)', caseSensitive: false).firstMatch(extracted);
-          var templateTitle = titleMatch?.group(1)?.trim() ?? '';
-          var template = templateMatch?.group(1)?.trim() ?? '';
-          if (template.isEmpty) {
-            final unlabelled = extracted.replaceAll('```', '').trim();
-            if (_isUsefulPromptTemplate(unlabelled)) template = unlabelled;
-          }
+          final parsed = PromptExtractionParser.parse(extracted);
+          var templateTitle = parsed.title;
+          var template = parsed.template;
           if (!_isUsefulPromptTemplate(template)) {
             if (mounted) setState(() => _log.insert(0, 'Пропущено: Qwen не вернула пригодный шаблон промта'));
             continue;
