@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
-enum SearchProvider { all, google, yandex, duckDuckGo }
+enum SearchProvider { all, github, google, yandex, duckDuckGo }
 
 class WebResearchResult {
   const WebResearchResult({
@@ -32,7 +32,7 @@ class WebResearchService {
     final q = query.trim();
     if (q.isEmpty) return const [];
     final providers = provider == SearchProvider.all
-        ? [SearchProvider.google, SearchProvider.yandex, SearchProvider.duckDuckGo]
+        ? [SearchProvider.github]
         : [provider];
     final collected = <String, WebResearchResult>{};
     final errors = <String>[];
@@ -41,7 +41,9 @@ class WebResearchService {
     // results from the remaining providers.
     for (final engine in providers) {
       try {
-        final results = await _searchOne(q, engine);
+        final results = engine == SearchProvider.github
+            ? await _searchGitHub(q)
+            : await _searchOne(q, engine);
         for (final result in results) {
           collected.putIfAbsent(result.url, () => result);
         }
@@ -59,9 +61,77 @@ class WebResearchService {
     return ranked.take(18).toList();
   }
 
+  Future<List<WebResearchResult>> _searchGitHub(String query) async {
+    final focusedQuery = _githubPromptQuery(query);
+    final uri = Uri.https('api.github.com', '/search/repositories', {
+      'q': focusedQuery,
+      'sort': 'stars',
+      'order': 'desc',
+      'per_page': '12',
+    });
+    final response = await _client.get(uri, headers: {
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'PromptLabAI-PromptResearch/1.0',
+    }).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      if (response.statusCode == 403 || response.statusCode == 429) {
+        throw StateError('GitHub API временно ограничил запросы (HTTP ${response.statusCode}).');
+      }
+      throw StateError('GitHub API HTTP ${response.statusCode}.');
+    }
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+    if (decoded is! Map<String, dynamic> || decoded['items'] is! List) {
+      throw const FormatException('GitHub API вернул неожиданный формат.');
+    }
+    final results = <WebResearchResult>[];
+    for (final item in decoded['items'] as List) {
+      if (item is! Map<String, dynamic>) continue;
+      final fullName = item['full_name']?.toString() ?? '';
+      final branch = item['default_branch']?.toString() ?? 'main';
+      final htmlUrl = item['html_url']?.toString() ?? '';
+      final description = item['description']?.toString() ?? '';
+      if (fullName.isEmpty || htmlUrl.isEmpty) continue;
+      final searchable = '$fullName $description'.toLowerCase();
+      if (!RegExp(r'prompt|prompts|шаблон|промт|промпт|awesome', caseSensitive: false).hasMatch(searchable)) continue;
+      final parts = fullName.split('/');
+      if (parts.length != 2) continue;
+      final readmeUrl = Uri.https(
+        'raw.githubusercontent.com',
+        '/${parts[0]}/${parts[1]}/$branch/README.md',
+      ).toString();
+      results.add(WebResearchResult(
+        title: fullName,
+        url: readmeUrl,
+        snippet: description,
+        provider: 'GitHub API',
+      ));
+    }
+    if (results.isEmpty) {
+      throw StateError('GitHub API не нашёл публичных репозиториев с признаками prompt templates.');
+    }
+    return results;
+  }
+
+  String _githubPromptQuery(String query) {
+    final terms = query
+        .replaceAll(RegExp(r'["()]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty && !{
+          'site:github.com', 'prompt', 'prompts', 'template', 'templates',
+          'examples', 'reusable', 'system', 'library',
+        }.contains(word.toLowerCase()))
+        .take(8)
+        .join(' ');
+    final focused = terms.isEmpty ? 'prompt templates' : terms;
+    return '$focused prompt (templates OR prompts OR system-prompts) in:name,description,readme';
+  }
+
   Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine, {int candidateOffset = 0}) async {
     late final List<Uri> candidates;
     switch (engine) {
+      case SearchProvider.github:
+        throw ArgumentError('GitHub search uses the public API');
       case SearchProvider.google:
         candidates = [
           Uri.https('www.google.com', '/search', {'q': query, 'num': '10', 'hl': 'ru', 'udm': '14'}),
@@ -221,10 +291,11 @@ class WebResearchService {
   }
 
   String _label(SearchProvider engine) => switch (engine) {
+    SearchProvider.github => 'GitHub API',
     SearchProvider.google => 'Google',
     SearchProvider.yandex => 'Яндекс',
     SearchProvider.duckDuckGo => 'DuckDuckGo',
-    SearchProvider.all => 'Все поисковики',
+    SearchProvider.all => 'Публичные API',
   };
 
   Future<String> readPage(String url) async {
