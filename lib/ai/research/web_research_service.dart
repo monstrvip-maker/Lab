@@ -455,7 +455,7 @@ class WebResearchService {
   String _limit(String value) {
     final text = value.trim();
     // Keep the source excerpt small enough for a 2K-token mobile context.
-    return text.length <= 2200 ? text : text.substring(0, 2200);
+    return text.length <= 14000 ? text : text.substring(0, 14000);
   }
 
   void dispose() => _client.close();
