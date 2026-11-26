@@ -124,7 +124,7 @@ class WebResearchService {
         .take(8)
         .join(' ');
     final focused = terms.isEmpty ? 'prompt templates' : terms;
-    return '$focused prompt (templates OR prompts OR system-prompts) in:name,description,readme';
+    return '$focused prompt in:name,description,readme';
   }
 
   Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine, {int candidateOffset = 0}) async {
@@ -189,6 +189,7 @@ class WebResearchService {
       final href = anchor.attributes['href'] ?? '';
       final heading = anchor.querySelector('h3');
       final title = switch (engine) {
+        SearchProvider.github => '',
         SearchProvider.google => _firstNonEmpty([
             heading?.text,
             anchor.querySelector('.LC20lb, h2, h3')?.text,
