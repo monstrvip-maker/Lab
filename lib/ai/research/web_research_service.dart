@@ -340,7 +340,7 @@ String normalizeResearchSourceUrl(String value) {
     ..removeWhere((key, _) =>
         key.toLowerCase().startsWith('utm_') ||
         {'yclid', 'gclid', 'fbclid', 'ref', 'from'}.contains(key.toLowerCase()));
-  return uri.replace(fragment: '', queryParameters: query.isEmpty ? null : query).toString();
+  return uri.removeFragment().replace(host: host, queryParameters: query.isEmpty ? null : query).toString();
 }
 
 
