@@ -274,8 +274,8 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
   String _promptFocusedExcerpt(String page) {
     // Prefer an actual prompt block over a repository's introductory text.
     final markers = <RegExp>[
-      RegExp(r'(?im)^\s*(?:system\s+prompt|prompt\s*[:=]|template\s*[:=]|you are\b|act as\b|role\s*:)'),
-      RegExp(r'(?im)^\s*(?:###?\s*)?(?:prompts?|prompt templates?|system prompts?)\b'),
+      RegExp(r'^\s*(?:system\s+prompt|prompt\s*[:=]|template\s*[:=]|you are\b|act as\b|role\s*:)', multiLine: true, caseSensitive: false),
+      RegExp(r'^\s*(?:###?\s*)?(?:prompts?|prompt templates?|system prompts?)\b', multiLine: true, caseSensitive: false),
     ];
     var position = -1;
     for (final marker in markers) {
