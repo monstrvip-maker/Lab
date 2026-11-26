@@ -72,8 +72,9 @@ class WebResearchService {
   }
 
   Future<List<WebResearchResult>> _searchHuggingFace(String query) async {
+    final searchTerms = _promptSearchTerms(query);
     final uri = Uri.https('huggingface.co', '/api/datasets', {
-      'search': 'prompt',
+      'search': searchTerms.isEmpty ? 'prompt' : 'prompt $searchTerms',
       'limit': '20',
       'sort': 'downloads',
       'direction': '-1',
@@ -95,14 +96,14 @@ class WebResearchService {
       final id = item['id']?.toString() ?? '';
       if (id.isEmpty) continue;
       final searchable = id.toLowerCase();
-      if (!RegExp(r'prompt|prompts|instruction|chatbot', caseSensitive: false).hasMatch(searchable)) continue;
+      if (!RegExp(r'prompt|prompts|instruction', caseSensitive: false).hasMatch(searchable)) continue;
       results.add(WebResearchResult(
         title: 'Hugging Face · $id',
         url: Uri.https('huggingface.co', '/datasets/$id/raw/main/README.md').toString(),
         snippet: 'Публичная карточка датасета, найденная через Hugging Face API',
         provider: 'Hugging Face API',
       ));
-      if (results.length >= 8) break;
+      if (results.length >= 12) break;
     }
     if (results.isEmpty) {
       throw StateError('Hugging Face не нашёл датасетов с явными признаками prompt.');
@@ -161,17 +162,21 @@ class WebResearchService {
   }
 
   String _githubPromptQuery(String query) {
-    final terms = query
+    // Restrict repository discovery to names that explicitly advertise
+    // prompt collections. Category relevance is checked separately.
+    return 'prompt in:name';
+  }
+
+  String _promptSearchTerms(String query) {
+    return query
         .replaceAll(RegExp(r'["()]'), ' ')
         .split(RegExp(r'\s+'))
         .where((word) => word.isNotEmpty && !{
           'site:github.com', 'prompt', 'prompts', 'template', 'templates',
-          'examples', 'reusable', 'system', 'library',
+          'examples', 'reusable', 'system', 'library', 'ready', 'examples',
         }.contains(word.toLowerCase()))
-        .take(8)
+        .take(4)
         .join(' ');
-    final focused = terms.isEmpty ? 'prompt templates' : terms;
-    return '$focused prompt in:name,description,readme';
   }
 
   Future<List<WebResearchResult>> _searchOne(String query, SearchProvider engine, {int candidateOffset = 0}) async {
