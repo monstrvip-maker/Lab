@@ -173,7 +173,7 @@ class WebResearchService {
         .split(RegExp(r'\s+'))
         .where((word) => word.isNotEmpty && !{
           'site:github.com', 'prompt', 'prompts', 'template', 'templates',
-          'examples', 'reusable', 'system', 'library', 'ready', 'examples',
+          'examples', 'reusable', 'system', 'library', 'ready',
         }.contains(word.toLowerCase()))
         .take(4)
         .join(' ');
