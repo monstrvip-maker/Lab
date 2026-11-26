@@ -42,7 +42,7 @@ class WebResearchService {
     for (final engine in providers) {
       try {
         final results = engine == SearchProvider.github
-            ? await _searchGitHub(q)
+            ? await _searchGitHubWithFallback(q)
             : await _searchOne(q, engine);
         for (final result in results) {
           collected.putIfAbsent(result.url, () => result);
@@ -59,6 +59,55 @@ class WebResearchService {
     final ranked = collected.values.toList()
       ..sort((a, b) => _relevanceScore(b, q).compareTo(_relevanceScore(a, q)));
     return ranked.take(18).toList();
+  }
+
+  Future<List<WebResearchResult>> _searchGitHubWithFallback(String query) async {
+    try {
+      final github = await _searchGitHub(query);
+      if (github.isNotEmpty) return github;
+    } catch (_) {
+      // Continue to the independent Hugging Face public catalog.
+    }
+    return _searchHuggingFace(query);
+  }
+
+  Future<List<WebResearchResult>> _searchHuggingFace(String query) async {
+    final uri = Uri.https('huggingface.co', '/api/datasets', {
+      'search': 'prompt',
+      'limit': '20',
+      'sort': 'downloads',
+      'direction': '-1',
+    });
+    final response = await _client.get(uri, headers: {
+      'Accept': 'application/json',
+      'User-Agent': 'PromptLabAI-PromptResearch/1.0',
+    }).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw StateError('Публичный каталог Hugging Face недоступен (HTTP ${response.statusCode}).');
+    }
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+    if (decoded is! List) {
+      throw const FormatException('Hugging Face API вернул неожиданный формат.');
+    }
+    final results = <WebResearchResult>[];
+    for (final item in decoded) {
+      if (item is! Map<String, dynamic>) continue;
+      final id = item['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      final searchable = id.toLowerCase();
+      if (!RegExp(r'prompt|prompts|instruction|chatbot', caseSensitive: false).hasMatch(searchable)) continue;
+      results.add(WebResearchResult(
+        title: 'Hugging Face · $id',
+        url: Uri.https('huggingface.co', '/datasets/$id/raw/main/README.md').toString(),
+        snippet: 'Публичная карточка датасета, найденная через Hugging Face API',
+        provider: 'Hugging Face API',
+      ));
+      if (results.length >= 8) break;
+    }
+    if (results.isEmpty) {
+      throw StateError('Hugging Face не нашёл датасетов с явными признаками prompt.');
+    }
+    return results;
   }
 
   Future<List<WebResearchResult>> _searchGitHub(String query) async {
