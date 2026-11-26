@@ -373,6 +373,28 @@ class WebResearchService {
       directError = error;
     }
 
+    // Git repositories do not always use README.md. Try common README
+    // filenames directly on raw.githubusercontent.com before using a reader.
+    if (uri.host == 'raw.githubusercontent.com' &&
+        uri.path.toLowerCase().endsWith('/readme.md') &&
+        directError.toString().contains('404')) {
+      for (final filename in ['README.rst', 'README.markdown', 'README']) {
+        final alternate = uri.replace(path: uri.path.substring(0, uri.path.lastIndexOf('/') + 1) + filename);
+        try {
+          final alternateResponse = await _client.get(alternate, headers: {
+            'User-Agent': 'PromptLabAI-PromptResearch/1.0',
+            'Accept': 'text/plain',
+          }).timeout(const Duration(seconds: 12));
+          if (alternateResponse.statusCode == 200) {
+            final text = utf8.decode(alternateResponse.bodyBytes, allowMalformed: true).trim();
+            if (text.length >= 160) return _limit(text);
+          }
+        } catch (_) {
+          // Try the next conventional README filename.
+        }
+      }
+    }
+
     // Many public sites reject lightweight clients (403/429) or render the
     // article client-side. Jina Reader is a public text-reader fallback; it
     // does not bypass authentication or CAPTCHA and only reads public URLs.
