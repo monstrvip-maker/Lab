@@ -18,6 +18,24 @@ void main() {
       expect(parsed.template, contains('You are an analyst'));
     });
 
+    test('rejects unlabelled explanatory prose', () {
+      final parsed = PromptExtractionParser.parse(
+        'На этой странице собраны полезные рекомендации по работе с документами. '
+        'Автор рассказывает о нескольких подходах, приводит примеры и объясняет '
+        'почему важно проверять итоговый результат перед публикацией.',
+      );
+      expect(parsed.template, isEmpty);
+    });
+
+    test('accepts an unlabelled response that clearly starts as a prompt', () {
+      const response = 'Ты — опытный аналитик. Проанализируй [ДОКУМЕНТ] и [ЦЕЛЬ]. '
+          'Входные данные: используй [КОНТЕКСТ]. Сначала выдели тезисы, затем сравни '
+          'факты. Не выдумывай сведения. Формат результата: структурированный отчёт '
+          'с выводами, таблицей и рекомендациями.';
+      final parsed = PromptExtractionParser.parse(response);
+      expect(parsed.template, startsWith('Ты —'));
+    });
+
     test('rejects pages without suitable prompts', () {
       final parsed = PromptExtractionParser.parse('ИСТОЧНИК_НЕПОДХОДИТ');
       expect(parsed.template, isEmpty);
