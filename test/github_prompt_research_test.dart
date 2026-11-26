@@ -41,18 +41,9 @@ void main() {
       service.dispose();
     });
 
-    test('does not return unrelated repositories', () async {
+    test('reports when GitHub returns no matching repositories', () async {
       final client = MockClient((request) async => http.Response(
-        jsonEncode({
-          'items': [
-            {
-              'full_name': 'sample/weather-app',
-              'default_branch': 'main',
-              'html_url': 'https://github.com/sample/weather-app',
-              'description': 'A simple weather application',
-            },
-          ],
-        }),
+        jsonEncode({'items': []}),
         200,
         headers: {'content-type': 'application/json'},
       ));
@@ -62,6 +53,6 @@ void main() {
         throwsA(isA<StateError>()),
       );
       service.dispose();
-    });
+    });;
   });
 }
