@@ -179,7 +179,6 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
     final title = result.title.toLowerCase();
     final snippet = result.snippet.toLowerCase();
     final uri = Uri.tryParse(result.url);
-    final path = (uri?.path ?? '').toLowerCase();
     if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') ||
         title.trim().length < 4) return -100;
     final explicit = _hasPromptEvidence(result);
