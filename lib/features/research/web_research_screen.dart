@@ -48,8 +48,57 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       _learned = learned;
       _savedPrompts = prompts;
       _cycles = state.isEmpty ? 0 : state.first['cycle_count'] as int;
-      _log..clear()..addAll(history.map((row) => 'Изучено: ${row['title']} · ${row['provider']}'));
+      _log..clear()..addAll(history.map((row) {
+        final summary = (row['summary'] as String? ?? '');
+        return summary.startsWith('Пропущено:')
+            ? 'Пропущено: ${row['title']} · ${summary.substring('Пропущено:'.length).trim()}'
+            : 'Изучено: ${row['title']} · ${row['provider']}';
+      }));
     });
+  }
+
+  Future<void> _recordSkippedSource(
+    WebResearchResult result,
+    String topic,
+    String reason,
+  ) async {
+    final db = await AppDatabase.instance.database;
+    final existing = await db.query(
+      'learning_history',
+      columns: ['id'],
+      where: 'source_url = ?',
+      whereArgs: [result.url],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return;
+    await db.insert('learning_history', {
+      'topic': topic,
+      'title': result.title,
+      'source_url': result.url,
+      'provider': result.provider,
+      'summary': 'Пропущено: $reason',
+      'prompt_id': null,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM learning_history'),
+    ) ?? _learned;
+    if (mounted) {
+      setState(() {
+        _learned = count;
+        _log.insert(0, 'Пропущен источник: ${result.title} · $reason');
+        if (_log.length > 30) _log.removeLast();
+      });
+    }
+  }
+
+  String _readFailureReason(Object error) {
+    final message = error.toString();
+    if (message.contains('451')) return 'HTTP 451 — содержимое недоступно';
+    if (message.contains('403')) return 'HTTP 403 — доступ запрещён';
+    if (message.contains('404')) return 'HTTP 404 — страница не найдена';
+    if (message.length > 180) return message.substring(0, 180);
+    return message;
   }
 
   Future<void> _persistCycle() async {
@@ -336,7 +385,10 @@ ${recentTopics.isEmpty ? 'Пока нет.' : recentTopics}
           }
           if (mounted) setState(() => _status = 'Qwen изучает: ${result.title}');
           final page = await _service.readPage(result.url);
-          if (page.trim().length < 180) continue;
+          if (page.trim().length < 180) {
+            await _recordSkippedSource(result, topic, 'на странице недостаточно текста');
+            continue;
+          }
           // Keep instructions, source text and generation inside the 2K context.
           // Cyrillic pages tokenize densely, so pass only a compact excerpt.
           final pageExcerpt = _promptFocusedExcerpt(page);
@@ -364,7 +416,11 @@ $pageExcerpt
           var templateTitle = parsed.title;
           var template = parsed.template;
           if (!_isUsefulPromptTemplate(template)) {
-            if (mounted) setState(() => _log.insert(0, 'Пропущено: Qwen не вернула пригодный шаблон промта'));
+            await _recordSkippedSource(
+              result,
+              topic,
+              'Qwen не извлекла пригодный шаблон промта',
+            );
             continue;
           }
           if (templateTitle.isEmpty || templateTitle.toUpperCase() == 'НЕТ') templateTitle = 'Практический промт: $topic';
@@ -416,7 +472,7 @@ $pageExcerpt
             }
             continue;
           }
-          if (mounted) setState(() => _log.insert(0, 'Пропущен источник ${result.url}: $e'));
+          await _recordSkippedSource(result, topic, _readFailureReason(e));
         }
       }
       if (studied == 0) {
