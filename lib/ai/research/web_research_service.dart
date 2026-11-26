@@ -217,7 +217,7 @@ class WebResearchService {
 
   String? _validHttp(String value) {
     final normalized = normalizeResearchSourceUrl(value);
-    return normalized.isEmpty ? null : normalized;
+    return normalized.isEmpty || isSearchEngineSourceUrl(normalized) ? null : normalized;
   }
 
   String _label(SearchProvider engine) => switch (engine) {
@@ -349,12 +349,14 @@ String normalizeResearchSourceUrl(String value) {
 bool isSearchEngineSourceUrl(String value) {
   final uri = Uri.tryParse(value);
   if (uri == null) return true;
-  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\.'), '');
-  const blocked = [
-    'google.', 'yandex.', 'ya.ru', 'yastatic.', 'duckduckgo.',
-    'bing.com', 'search.yahoo.', 'ecosia.org',
-  ];
-  return host.isEmpty || blocked.any((domain) => host == domain || host.endsWith('.$domain')) ||
-      (host.contains('google.') && uri.path == '/url') ||
-      (host.contains('yandex.') && (uri.path == '/' || uri.path.startsWith('/search')));
+  final host = uri.host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '');
+  final isGoogle = host.startsWith('google.') || host.contains('.google.');
+  final isYandex = host == 'ya.ru' || host.endsWith('.ya.ru') ||
+      host.startsWith('yandex.') || host.contains('.yandex.') ||
+      host.endsWith('.yastatic.net');
+  final isDuckDuckGo = host == 'duckduckgo.com' || host.endsWith('.duckduckgo.com');
+  final isOtherSearch = host == 'bing.com' || host.endsWith('.bing.com') ||
+      host == 'ecosia.org' || host.endsWith('.ecosia.org') ||
+      host.startsWith('search.yahoo.');
+  return isGoogle || isYandex || isDuckDuckGo || isOtherSearch;
 }
