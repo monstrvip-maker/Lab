@@ -162,9 +162,20 @@ class WebResearchService {
   }
 
   String _githubPromptQuery(String query) {
-    // Restrict repository discovery to names that explicitly advertise
-    // prompt collections. Category relevance is checked separately.
-    return 'prompt in:name';
+    // Keep "prompt" mandatory while adding the current research topic.
+    // This avoids receiving the same globally popular repositories every cycle.
+    final terms = query
+        .replaceAll(RegExp(r'["()]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty && !{
+          'site:github.com', 'prompt', 'prompts', 'template', 'templates',
+          'examples', 'reusable', 'system', 'library', 'ready',
+        }.contains(word.toLowerCase()))
+        .take(5)
+        .join(' ');
+    return terms.isEmpty
+        ? 'prompt in:name'
+        : 'prompt $terms in:name,description,readme';
   }
 
   String _promptSearchTerms(String query) {
