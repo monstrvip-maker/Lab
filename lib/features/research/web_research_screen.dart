@@ -260,8 +260,8 @@ class _WebResearchScreenState extends State<WebResearchScreen> {
       final path = uri?.pathSegments ?? const <String>[];
       final sourceKey = uri?.host == 'raw.githubusercontent.com' && path.length >= 2
           ? 'github:${path[0]}/${path[1]}'
-          : uri?.host == 'huggingface.co' && path.length >= 2
-              ? 'hf:${path[1]}'
+          : uri?.host == 'huggingface.co' && path.length >= 3
+              ? 'hf:${path[1]}/${path[2]}'
               : item.url;
       if (score < 5 || !hosts.add(sourceKey)) continue;
       selected.add(item);
